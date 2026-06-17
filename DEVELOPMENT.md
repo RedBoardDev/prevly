@@ -39,11 +39,22 @@ go vet ./...
 go test ./...
 ```
 
-Tests are unit-only and hermetic (no Docker, no network): they cover config
-load/validation, per-app path filtering, branch filtering, subdomain derivation,
-the preview state machine, webhook signature verification, the hardened run/build
-argument construction, the proxy routing/on-demand gating, and the reconciler
-lifecycle (deploy, fork gating, sleep, TTL, orphan GC, wake-on-request).
+The default suite is unit-only and hermetic (no Docker, no network): it covers
+config load/validation, per-app path filtering, branch filtering, subdomain
+derivation, the preview state machine, webhook signature verification, the
+hardened run/build argument construction, the proxy routing/on-demand gating,
+and the reconciler lifecycle (deploy, fork gating, sleep, TTL, orphan GC,
+wake-on-request).
+
+### Integration test (real Docker)
+
+A build-tagged test exercises the full data plane against a live Docker daemon —
+real BuildKit build → hardened run (asserted via `docker inspect`) → proxy route
+→ sleep → wake-on-request → teardown. It needs Docker running:
+
+```sh
+go test -tags integration ./internal/reconcile/ -run Integration -v
+```
 
 ## Run locally
 
