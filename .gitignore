@@ -20,3 +20,9 @@
 # Internal handoff docs (kept local, not published)
 /docs/
 /spec.md
+
+# Local tooling / agent files (not published)
+/.claude/
+/.serena/
+/CLAUDE.md
+/DEVELOPMENT.md

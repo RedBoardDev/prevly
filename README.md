@@ -9,8 +9,7 @@ previews", but open-source and running on **your own Docker host, under your own
 domain**.
 
 > **Status: v1 implemented.** The daemon (webhook → build → run → proxy →
-> PR feedback → lifecycle) is built and tested. See
-> [`DEVELOPMENT.md`](./DEVELOPMENT.md) to build, test and run it.
+> PR feedback → lifecycle) is built and tested.
 
 ## Why
 
