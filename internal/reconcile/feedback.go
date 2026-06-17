@@ -1,0 +1,70 @@
+package reconcile
+
+import (
+	"context"
+
+	gh "github.com/RedBoardDev/prevly/internal/github"
+	"github.com/RedBoardDev/prevly/internal/model"
+)
+
+// publish reflects a preview's current state to GitHub: it advances the per-app
+// Deployment and refreshes the PR's sticky comment. Feedback failures are
+// logged but never abort a deploy.
+func (r *Reconciler) publish(ctx context.Context, ev *gh.PullRequestEvent, p *model.Preview) {
+	if ev.InstallationID != 0 {
+		r.publishDeployment(ctx, ev, p)
+	}
+	r.updateComment(ctx, ev)
+}
+
+func (r *Reconciler) publishDeployment(ctx context.Context, ev *gh.PullRequestEvent, p *model.Preview) {
+	if p.DeploymentID == 0 {
+		env := deploymentEnv(p)
+		id, err := r.gh.CreateDeployment(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.HeadSHA, env)
+		if err != nil {
+			r.logger.Warn("create deployment", "repo", ev.Repo, "app", p.AppName, "err", err)
+			return
+		}
+		p.DeploymentID = id
+		_ = r.store.Put(p)
+	}
+	if err := r.gh.SetDeploymentStatus(ctx, ev.InstallationID, ev.Owner, ev.Name, p.DeploymentID, p.Status, liveURL(p)); err != nil {
+		r.logger.Warn("set deployment status", "repo", ev.Repo, "app", p.AppName, "err", err)
+	}
+}
+
+func (r *Reconciler) updateComment(ctx context.Context, ev *gh.PullRequestEvent) {
+	if ev.InstallationID == 0 {
+		return
+	}
+	previews, err := r.store.ListByPR(ev.Repo, ev.Number)
+	if err != nil {
+		r.logger.Warn("list previews for comment", "err", err)
+		return
+	}
+	statuses := make([]gh.AppStatus, 0, len(previews))
+	for _, p := range previews {
+		statuses = append(statuses, gh.AppStatus{
+			App:        p.AppName,
+			Status:     p.Status,
+			URL:        liveURL(p),
+			LogExcerpt: p.FailureLog,
+		})
+	}
+	body := gh.RenderStickyComment(statuses)
+	if _, err := r.gh.UpsertComment(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.Number, body); err != nil {
+		r.logger.Warn("upsert sticky comment", "repo", ev.Repo, "pr", ev.Number, "err", err)
+	}
+}
+
+func deploymentEnv(p *model.Preview) string {
+	return "preview/" + p.Host
+}
+
+// liveURL returns the preview URL only when it is reachable.
+func liveURL(p *model.Preview) string {
+	if p.Status == model.StatusRunning || p.Status == model.StatusSleeping {
+		return p.URL
+	}
+	return ""
+}

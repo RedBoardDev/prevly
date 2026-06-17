@@ -1,16 +1,16 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/RedBoardDev/prevly/internal/config"
-	applog "github.com/RedBoardDev/prevly/internal/log"
-	"github.com/RedBoardDev/prevly/internal/model"
-	"github.com/RedBoardDev/prevly/internal/store"
+	"github.com/RedBoardDev/prevly/internal/reconcile"
+	"github.com/RedBoardDev/prevly/internal/runtime"
+	"github.com/RedBoardDev/prevly/internal/secrets"
 )
 
 func newDestroyCmd(g *globalFlags) *cobra.Command {
@@ -39,33 +39,22 @@ func newDestroyCmd(g *globalFlags) *cobra.Command {
 			}
 			defer st.Close()
 
-			return destroyPreviews(cmd.Context(), g.logger(), cfg, st, repo, pr, app)
+			rec := reconcile.New(reconcile.Deps{
+				Config:  cfg,
+				Store:   st,
+				Runtime: runtime.New(),
+				Secrets: secrets.New(cfg.Secrets, os.LookupEnv),
+				Logger:  g.logger(),
+			})
+			n, err := rec.Teardown(cmd.Context(), repo, pr, app)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return fmt.Errorf("no previews found for %s#%d", repo, pr)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "destroyed %d preview(s) for %s#%d\n", n, repo, pr)
+			return nil
 		},
 	}
-}
-
-// destroyPreviews tears down a PR's previews. The container/network removal is
-// wired to the runtime in M5; here it removes the state records the reconciler
-// and proxy route on. Orphaned containers are reaped by the reconciler.
-func destroyPreviews(_ context.Context, logger *applog.Logger, _ *config.HostConfig, st *store.Store, repo string, pr int, app string) error {
-	previews, err := st.ListByPR(repo, pr)
-	if err != nil {
-		return err
-	}
-	var removed int
-	for _, p := range previews {
-		if app != "" && p.AppName != app {
-			continue
-		}
-		p.Status = model.StatusDestroyed
-		if err := st.Delete(p.Repo, p.PRNumber, p.AppName); err != nil {
-			return err
-		}
-		logger.Info("destroyed preview", "repo", repo, "pr", pr, "app", p.AppName)
-		removed++
-	}
-	if removed == 0 {
-		return fmt.Errorf("no previews found for %s#%d", repo, pr)
-	}
-	return nil
 }

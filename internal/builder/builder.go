@@ -29,9 +29,10 @@ type BuildResult struct {
 	Log      string
 }
 
-// Builder builds preview images. Implemented by DockerBuilder; an interface so
-// the reconciler can be tested with a fake.
+// Builder checks out PR source and builds preview images. Implemented by
+// DockerBuilder; an interface so the reconciler can be tested with a fake.
 type Builder interface {
+	Checkout(ctx context.Context, opts CheckoutOptions) error
 	Build(ctx context.Context, spec BuildSpec) (BuildResult, error)
 }
 

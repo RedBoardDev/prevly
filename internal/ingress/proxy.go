@@ -26,8 +26,16 @@ type Proxy struct {
 	dataDir    string
 	logger     *applog.Logger
 
+	// control serves requests addressed to the base domain (webhooks, health),
+	// distinct from preview hosts.
+	control http.Handler
+
 	rp *httputil.ReverseProxy
 }
+
+// SetControlHandler registers the handler for requests to the base domain
+// (e.g. the GitHub webhook endpoint).
+func (p *Proxy) SetControlHandler(h http.Handler) { p.control = h }
 
 // NewProxy builds a Proxy. dataDir is where CertMagic stores certificates.
 func NewProxy(resolver Resolver, cfg *config.HostConfig, logger *applog.Logger) *Proxy {
@@ -71,6 +79,10 @@ func (p *Proxy) proxyError(w http.ResponseWriter, _ *http.Request, err error) {
 // ServeHTTP resolves the host to an upstream (waking it if asleep) and proxies.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := hostOnly(r.Host)
+	if host == p.baseDomain && p.control != nil {
+		p.control.ServeHTTP(w, r)
+		return
+	}
 	target, ok, err := p.resolver.Resolve(r.Context(), host)
 	if err != nil {
 		p.logger.Error("resolve preview", "host", host, "err", err)
@@ -160,7 +172,11 @@ func (p *Proxy) certmagic(_ context.Context) (*certmagic.Config, *certmagic.ACME
 // onDemandDecision gates on-demand issuance: only mint a certificate for a host
 // that maps to a known preview, to prevent abuse.
 func (p *Proxy) onDemandDecision(_ context.Context, name string) error {
-	if !p.resolver.Known(hostOnly(name)) {
+	host := hostOnly(name)
+	if host == p.baseDomain {
+		return nil
+	}
+	if !p.resolver.Known(host) {
 		return fmt.Errorf("no preview for host %q", name)
 	}
 	return nil
