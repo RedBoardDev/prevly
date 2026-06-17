@@ -8,9 +8,10 @@ redeployed on each commit, torn down when the PR closes. Think "AWS Amplify
 previews", but open-source and running on **your own Docker host, under your own
 domain**.
 
-> **Status: pre-development.** This repo currently holds the **product spec and
-> handoff docs**. No code yet. Start with [`spec.md`](./spec.md) then the
-> [`docs/`](./docs) deep-dives. The intended build order is in
+> **Status: v1 implemented.** The daemon (webhook → build → run → proxy →
+> PR feedback → lifecycle) is built and unit-tested. See
+> [`DEVELOPMENT.md`](./DEVELOPMENT.md) to build, test and run it, and
+> [`docs/`](./docs) for the design. The build order is in
 > [`docs/implementation-plan.md`](./docs/implementation-plan.md).
 
 ## Why
@@ -35,6 +36,37 @@ PR opened/updated ──webhook──▶ prevly daemon (on your Docker host)
    embedded proxy (CertMagic) serves  https://pr-<N>-<app>.<your-domain>  (auto TLS)
    sticky PR comment + GitHub Deployment with the URL
 PR closed ──▶ torn down.   Idle ──▶ sleeps, wakes on next request in ~1-3s.
+```
+
+## Quickstart
+
+On a Docker host with a public IP and a wildcard DNS record
+(`*.<base_domain> → host`):
+
+```sh
+go build ./cmd/prevly                       # or grab a release binary
+cp examples/config.yaml /etc/prevly/config.yaml   # edit base_domain, tls, github
+cp examples/env.example /etc/prevly/prevly.env    # fill secrets (never commit)
+install -m644 packaging/prevly.service /etc/systemd/system/prevly.service
+systemctl enable --now prevly
+```
+
+Then create a GitHub App (permissions/events in
+[`docs/github-app.md`](./docs/github-app.md)), point its webhook at
+`https://<base_domain>/webhook`, install it on your repos, and add a
+`.prevly.yml` (`prevly init` scaffolds one; see
+[`examples/.prevly.yml`](./examples/.prevly.yml)).
+
+## CLI
+
+```
+prevly run       run the daemon (foreground; wrap in systemd)
+prevly init      scaffold a .prevly.yml in the current repo
+prevly status    list previews across repos
+prevly secret    inspect the env-backed secret table
+prevly destroy   admin teardown of a PR's previews
+prevly doctor    check Docker access, config, disk, rootless
+prevly version   version info
 ```
 
 ## Core principles

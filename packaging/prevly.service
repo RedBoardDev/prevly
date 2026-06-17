@@ -1,0 +1,25 @@
+[Unit]
+Description=prevly per-PR preview daemon
+Documentation=https://github.com/RedBoardDev/prevly
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/prevly run --config /etc/prevly/config.yaml
+# Secrets and provider credentials are loaded from the environment, never from
+# the YAML config (mode 600, owned by the prevly user).
+EnvironmentFile=/etc/prevly/prevly.env
+Restart=on-failure
+RestartSec=5s
+
+# Hardening. Binding :80/:443 requires the net-bind capability.
+NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
