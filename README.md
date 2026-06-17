@@ -9,10 +9,8 @@ previews", but open-source and running on **your own Docker host, under your own
 domain**.
 
 > **Status: v1 implemented.** The daemon (webhook → build → run → proxy →
-> PR feedback → lifecycle) is built and unit-tested. See
-> [`DEVELOPMENT.md`](./DEVELOPMENT.md) to build, test and run it, and
-> [`docs/`](./docs) for the design. The build order is in
-> [`docs/implementation-plan.md`](./docs/implementation-plan.md).
+> PR feedback → lifecycle) is built and tested. See
+> [`DEVELOPMENT.md`](./DEVELOPMENT.md) to build, test and run it.
 
 ## Why
 
@@ -53,8 +51,7 @@ systemctl enable --now prevly
 
 Then create a GitHub App — the manifest at
 [`packaging/github-app-manifest.json`](./packaging/github-app-manifest.json)
-pre-fills the permissions/events (detailed in
-[`docs/github-app.md`](./docs/github-app.md)) — point its webhook at
+pre-fills the permissions and events — point its webhook at
 `https://<base_domain>/webhook`, install it on your repos, and add a
 `.prevly.yml` (`prevly init` scaffolds one; see
 [`examples/.prevly.yml`](./examples/.prevly.yml)).
@@ -82,21 +79,6 @@ prevly version   version info
   bare metal, a laptop. No Kubernetes, no per-cloud SDK.
 - **GitHub-native UX.** Sticky PR comment + GitHub Deployments + ChatOps
   (`/preview redeploy|destroy|status`). No custom web dashboard.
-
-## Documentation map
-
-| Doc | Contents |
-|---|---|
-| [`spec.md`](./spec.md) | Canonical product spec + all locked decisions |
-| [`docs/architecture.md`](./docs/architecture.md) | Components, data flow, state, reconciler, embedded proxy |
-| [`docs/config-reference.md`](./docs/config-reference.md) | Full `.prevly.yml` + host config schema, examples |
-| [`docs/lifecycle-and-cli.md`](./docs/lifecycle-and-cli.md) | PR event state machine, sleep/wake, ChatOps, CLI |
-| [`docs/build-run.md`](./docs/build-run.md) | Build engine, per-app cache, hardened run, sleep/wake |
-| [`docs/tls-dns.md`](./docs/tls-dns.md) | CertMagic, DNS-01 (Route53/Cloudflare), on-demand, subdomains |
-| [`docs/github-app.md`](./docs/github-app.md) | GitHub App: permissions, events, install, auth, PR feedback |
-| [`docs/security.md`](./docs/security.md) | Threat model + hardening |
-| [`docs/decisions.md`](./docs/decisions.md) | Decision log (what + why + rejected alternatives) |
-| [`docs/implementation-plan.md`](./docs/implementation-plan.md) | Suggested Go module layout + build milestones |
 
 ## License
 

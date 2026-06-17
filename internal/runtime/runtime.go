@@ -175,7 +175,7 @@ func runArgs(spec RunSpec) []string {
 		"--name", spec.Name,
 		"--network", spec.Network,
 		"--restart", "no",
-		// Security baseline (docs/security.md): no privileges, drop all caps.
+		// Security baseline: no privileges, drop all caps.
 		"--cap-drop=ALL",
 		"--security-opt=no-new-privileges",
 	}

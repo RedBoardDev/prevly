@@ -11,7 +11,7 @@ import (
 
 // dnsProvider builds a CertMagic DNS provider for the configured backend. Both
 // providers read their credentials from the host environment, never from config
-// files (docs/security.md).
+// files.
 func dnsProvider(name string) (certmagic.DNSProvider, error) {
 	switch name {
 	case "route53":

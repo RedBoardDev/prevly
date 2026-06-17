@@ -35,9 +35,8 @@ func (s Status) Valid() bool {
 	}
 }
 
-// allowedTransitions encodes the preview state machine from
-// docs/lifecycle-and-cli.md. A transition to the same state is always allowed
-// (idempotent re-application by the reconciler).
+// allowedTransitions encodes the preview state machine. A transition to the
+// same state is always allowed (idempotent re-application by the reconciler).
 var allowedTransitions = map[Status][]Status{
 	StatusBuilding:  {StatusRunning, StatusFailed, StatusDestroyed},
 	StatusRunning:   {StatusSleeping, StatusBuilding, StatusFailed, StatusDestroyed},

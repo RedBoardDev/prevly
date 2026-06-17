@@ -11,9 +11,9 @@ import (
 	"github.com/RedBoardDev/prevly/internal/config"
 )
 
-// In v1, secrets are resolved from the daemon's environment by name (see
-// docs/decisions.md #9). The `secret` command therefore inspects the host
-// config's secret table and reports which referenced env vars are present.
+// In v1, secrets are resolved from the daemon's environment by name. The
+// `secret` command therefore inspects the host config's secret table and
+// reports which referenced env vars are present.
 func newSecretCmd(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret",

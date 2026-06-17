@@ -1,5 +1,5 @@
 // Command prevly is the single-binary daemon + CLI for per-PR preview
-// environments. See the docs/ directory for the design.
+// environments.
 package main
 
 import (

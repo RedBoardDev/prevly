@@ -16,3 +16,7 @@
 
 # Editor / OS
 .DS_Store
+
+# Internal handoff docs (kept local, not published)
+/docs/
+/spec.md

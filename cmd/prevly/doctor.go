@@ -44,7 +44,7 @@ func newDoctorCmd(g *globalFlags) *cobra.Command {
 
 			check("docker CLI present", checkDocker())
 			if rootless, err := dockerRootless(); err == nil && !rootless {
-				warn("docker rootless", "Docker is not running rootless; running rootless is recommended (see docs/security.md)")
+				warn("docker rootless", "Docker is not running rootless; running rootless is recommended")
 			}
 
 			if problems > 0 {
