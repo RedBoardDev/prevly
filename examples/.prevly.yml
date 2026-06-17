@@ -1,0 +1,38 @@
+version: 1
+
+# Which PRs get previews. Previews are per-PR; a base branch is never previewed.
+triggers:
+  target_branches: [main]
+  exclude_head_branches: ["dependabot/**"]
+
+# One or more apps. Each deploys ONLY when the PR touches files in its paths.
+apps:
+  - name: backoffice
+    paths:
+      - "apps/backoffice/**"
+      - "packages/ui/**"
+      - "packages/sdk/**"
+      - "yarn.lock"
+    dockerfile: apps/backoffice/Dockerfile
+    context: "."
+    subdomain: bo                  # -> pr-<N>-bo.<base_domain>
+    port: 3000
+    build_args:
+      NEXT_PUBLIC_API_URL: https://api.bo.staging.kare-app.fr
+    env:
+      NODE_ENV: production
+    secrets:
+      - NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+    healthcheck:
+      path: "/"
+      timeout: 30s
+  - name: audit
+    paths: ["apps/audit/**", "packages/sdk/**", "yarn.lock"]
+    dockerfile: apps/audit/Dockerfile
+    subdomain: audit
+    port: 3000
+    build_args:
+      NEXT_PUBLIC_API_URL: https://api.ad.staging.kare-app.fr
+
+ttl: 30d
+idle: 6h

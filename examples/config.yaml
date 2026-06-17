@@ -1,0 +1,31 @@
+# Example prevly host config. Install at /etc/prevly/config.yaml (mode 600).
+# Secrets and tokens are NEVER inline here — they come from the host environment.
+
+base_domain: preview.staging.kare-app.fr   # previews at pr-<N>[-<app>].<base_domain>
+
+tls:
+  mode: dns-01                     # dns-01 | on-demand
+  provider: route53                # route53 | cloudflare
+  email: ops@example.com           # ACME account email
+
+github:
+  app_id: 123456
+  private_key_path: /etc/prevly/github-app.pem
+  webhook_secret_env: PREVLY_WEBHOOK_SECRET
+
+secrets:                           # logical name -> env:VAR (resolved at runtime)
+  NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: env:PREVLY_SECRET_SA_KEY
+
+limits:
+  max_concurrent_builds: 2
+  max_concurrent_previews: 30
+  per_preview:
+    cpu: "1.5"                     # docker --cpus
+    memory: "512m"                 # docker --memory
+    pids: 512                      # docker --pids-limit
+
+defaults:
+  ttl: 30d
+  idle: 6h
+
+data_dir: /var/lib/prevly          # bbolt state + certs

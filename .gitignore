@@ -1,0 +1,18 @@
+# Binaries
+/prevly
+/dist/
+*.exe
+
+# Local state / data
+*.db
+/data/
+
+# Secrets and local env (never commit real secrets)
+.env
+*.pem
+
+# Go
+/vendor/
+
+# Editor / OS
+.DS_Store
