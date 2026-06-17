@@ -1,0 +1,25 @@
+{
+  "name": "prevly",
+  "description": "Per-PR preview environments on your own Docker host.",
+  "url": "https://github.com/RedBoardDev/prevly",
+  "public": false,
+  "redirect_url": "https://REPLACE_WITH_BASE_DOMAIN/healthz",
+  "hook_attributes": {
+    "url": "https://REPLACE_WITH_BASE_DOMAIN/webhook",
+    "active": true
+  },
+  "default_permissions": {
+    "contents": "read",
+    "pull_requests": "read",
+    "deployments": "write",
+    "issues": "write",
+    "checks": "write",
+    "metadata": "read"
+  },
+  "default_events": [
+    "pull_request",
+    "issue_comment",
+    "installation",
+    "installation_repositories"
+  ]
+}

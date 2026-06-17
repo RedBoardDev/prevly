@@ -146,6 +146,7 @@ func (r *Reconciler) runContainer(ctx context.Context, ev *gh.PullRequestEvent, 
 		Env:           app.Env,
 		Secrets:       secs,
 		Limits:        r.cfg.Limits.PerPreview,
+		ReadOnlyRoot:  r.cfg.Limits.PerPreview.ReadOnly,
 		Labels:        previewLabels(ev.Repo, ev.Number, app.Name),
 	}
 	id, hostPort, err := r.runtime.Run(ctx, spec)

@@ -34,6 +34,7 @@ type fakeRuntime struct {
 	netCreat []string
 	netRm    []string
 	imgRm    []string
+	pruned   int
 }
 
 func (f *fakeRuntime) EnsureNetwork(_ context.Context, n string) error {
@@ -69,6 +70,7 @@ func (f *fakeRuntime) RemoveImage(_ context.Context, i string) error {
 func (f *fakeRuntime) ListManaged(context.Context) ([]runtime.Container, error) {
 	return f.managed, nil
 }
+func (f *fakeRuntime) PruneDangling(context.Context) error { f.pruned++; return nil }
 
 type fakeBuilder struct {
 	buildErr    error
@@ -385,6 +387,25 @@ func TestResolveWakesSleeping(t *testing.T) {
 	got, _ := st.Get("org/repo", 1, "web")
 	if got.Status != model.StatusRunning {
 		t.Fatalf("woken preview should be running, got %q", got.Status)
+	}
+}
+
+func TestMaybePruneThrottled(t *testing.T) {
+	t.Parallel()
+	frt := &fakeRuntime{}
+	rec, _ := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
+	now := time.Now()
+	rec.now = func() time.Time { return now }
+	rec.pruneEvery = time.Hour
+
+	rec.lastPruneAt = now.Add(-2 * time.Hour)
+	rec.maybePrune(context.Background())
+	if frt.pruned != 1 {
+		t.Fatalf("should prune once past the window, got %d", frt.pruned)
+	}
+	rec.maybePrune(context.Background())
+	if frt.pruned != 1 {
+		t.Fatalf("should not prune again within the window, got %d", frt.pruned)
 	}
 }
 

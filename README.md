@@ -51,8 +51,10 @@ install -m644 packaging/prevly.service /etc/systemd/system/prevly.service
 systemctl enable --now prevly
 ```
 
-Then create a GitHub App (permissions/events in
-[`docs/github-app.md`](./docs/github-app.md)), point its webhook at
+Then create a GitHub App — the manifest at
+[`packaging/github-app-manifest.json`](./packaging/github-app-manifest.json)
+pre-fills the permissions/events (detailed in
+[`docs/github-app.md`](./docs/github-app.md)) — point its webhook at
 `https://<base_domain>/webhook`, install it on your repos, and add a
 `.prevly.yml` (`prevly init` scaffolds one; see
 [`examples/.prevly.yml`](./examples/.prevly.yml)).

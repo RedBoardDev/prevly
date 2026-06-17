@@ -23,6 +23,7 @@ limits:
     cpu: "1.5"                     # docker --cpus
     memory: "512m"                 # docker --memory
     pids: 512                      # docker --pids-limit
+    read_only: false               # read-only rootfs (+tmpfs); enable if apps tolerate it
 
 defaults:
   ttl: 30d

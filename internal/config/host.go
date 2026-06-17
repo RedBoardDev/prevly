@@ -59,6 +59,10 @@ type PerPreview struct {
 	CPU    string `yaml:"cpu"`    // docker --cpus
 	Memory string `yaml:"memory"` // docker --memory
 	PIDs   int64  `yaml:"pids"`   // docker --pids-limit
+	// ReadOnly mounts the container root filesystem read-only (with writable
+	// tmpfs for /tmp and /run). Off by default since many frontend runtimes
+	// write at runtime; enable it where the app tolerates it.
+	ReadOnly bool `yaml:"read_only"`
 }
 
 // Defaults provide fallbacks for lifecycle values omitted in `.prevly.yml`.

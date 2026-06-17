@@ -40,6 +40,7 @@ type Runtime interface {
 	Remove(ctx context.Context, containerID string) error
 	RemoveImage(ctx context.Context, image string) error
 	ListManaged(ctx context.Context) ([]Container, error)
+	PruneDangling(ctx context.Context) error
 }
 
 // Container is a managed container as reported by `docker ps`.
@@ -123,6 +124,18 @@ func (d *DockerRuntime) RemoveImage(ctx context.Context, image string) error {
 	_, _, err := d.r.run(ctx, "docker", "rmi", "-f", image)
 	if err != nil && !isNotFound(err) {
 		return err
+	}
+	return nil
+}
+
+// PruneDangling removes dangling images and reclaims build cache to keep host
+// disk usage bounded.
+func (d *DockerRuntime) PruneDangling(ctx context.Context) error {
+	if _, _, err := d.r.run(ctx, "docker", "image", "prune", "-f"); err != nil {
+		return fmt.Errorf("image prune: %w", err)
+	}
+	if _, _, err := d.r.run(ctx, "docker", "builder", "prune", "-f"); err != nil {
+		return fmt.Errorf("builder prune: %w", err)
 	}
 	return nil
 }

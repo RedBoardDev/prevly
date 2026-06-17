@@ -43,6 +43,10 @@ type Reconciler struct {
 	// readyTimeout bounds the post-deploy readiness wait.
 	readyTimeout time.Duration
 
+	// pruneEvery throttles dangling image / build-cache pruning.
+	pruneEvery  time.Duration
+	lastPruneAt time.Time
+
 	// now is injectable for deterministic tests.
 	now func() time.Time
 }
@@ -55,16 +59,18 @@ func New(d Deps) *Reconciler {
 		workDir = d.Config.DataDir + "/work"
 	}
 	return &Reconciler{
-		cfg:      d.Config,
-		store:    d.Store,
-		builder:  d.Builder,
-		runtime:  d.Runtime,
-		secrets:  d.Secrets,
-		gh:       d.GitHub,
-		logger:   d.Logger,
+		cfg:          d.Config,
+		store:        d.Store,
+		builder:      d.Builder,
+		runtime:      d.Runtime,
+		secrets:      d.Secrets,
+		gh:           d.GitHub,
+		logger:       d.Logger,
 		workDir:      workDir,
 		buildSem:     make(chan struct{}, builds),
 		readyTimeout: 30 * time.Second,
+		pruneEvery:   24 * time.Hour,
+		lastPruneAt:  time.Now(),
 		now:          time.Now,
 	}
 }

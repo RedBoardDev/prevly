@@ -49,6 +49,19 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		}
 	}
 	r.reapOrphans(ctx)
+	r.maybePrune(ctx)
+}
+
+// maybePrune reclaims dangling images and build cache at most once per
+// pruneEvery window to keep host disk usage bounded.
+func (r *Reconciler) maybePrune(ctx context.Context) {
+	if r.now().Sub(r.lastPruneAt) < r.pruneEvery {
+		return
+	}
+	r.lastPruneAt = r.now()
+	if err := r.runtime.PruneDangling(ctx); err != nil {
+		r.logger.Warn("prune dangling", "err", err)
+	}
 }
 
 func (r *Reconciler) sleep(ctx context.Context, p *model.Preview) {
