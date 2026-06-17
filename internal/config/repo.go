@@ -33,16 +33,16 @@ type Triggers struct {
 
 // AppConfig is one buildable+servable unit in a repo.
 type AppConfig struct {
-	Name       string            `yaml:"name"`
-	Paths      []string          `yaml:"paths"`
-	Dockerfile string            `yaml:"dockerfile"`
-	Context    string            `yaml:"context"`
-	Subdomain  string            `yaml:"subdomain"`
-	Port       int               `yaml:"port"`
-	BuildArgs  map[string]string `yaml:"build_args"`
-	Env        map[string]string `yaml:"env"`
-	Secrets    []string          `yaml:"secrets"`
-	Healthcheck *Healthcheck     `yaml:"healthcheck"`
+	Name        string            `yaml:"name"`
+	Paths       []string          `yaml:"paths"`
+	Dockerfile  string            `yaml:"dockerfile"`
+	Context     string            `yaml:"context"`
+	Subdomain   string            `yaml:"subdomain"`
+	Port        int               `yaml:"port"`
+	BuildArgs   map[string]string `yaml:"build_args"`
+	Env         map[string]string `yaml:"env"`
+	Secrets     []string          `yaml:"secrets"`
+	Healthcheck *Healthcheck      `yaml:"healthcheck"`
 }
 
 // Healthcheck describes how to probe readiness on deploy and on wake.

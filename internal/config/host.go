@@ -49,9 +49,9 @@ type GitHubConfig struct {
 
 // Limits caps concurrency and per-preview resources.
 type Limits struct {
-	MaxConcurrentBuilds   int           `yaml:"max_concurrent_builds"`
-	MaxConcurrentPreviews int           `yaml:"max_concurrent_previews"`
-	PerPreview            PerPreview    `yaml:"per_preview"`
+	MaxConcurrentBuilds   int        `yaml:"max_concurrent_builds"`
+	MaxConcurrentPreviews int        `yaml:"max_concurrent_previews"`
+	PerPreview            PerPreview `yaml:"per_preview"`
 }
 
 // PerPreview are the resource caps applied to each preview container.

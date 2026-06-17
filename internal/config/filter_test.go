@@ -93,9 +93,9 @@ func TestBranchAllowed(t *testing.T) {
 		},
 	}
 	tests := []struct {
-		name             string
-		base, head       string
-		want             bool
+		name       string
+		base, head string
+		want       bool
 	}{
 		{"main base ok", "main", "feature/x", true},
 		{"release base ok", "release", "fix/y", true},

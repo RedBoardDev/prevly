@@ -46,8 +46,8 @@ func ParseCommand(body string) (Command, bool) {
 // Trusted author associations: members of the repo/org that may run ChatOps and
 // whose PRs (even from a fork) may auto-build.
 var trustedAssociations = map[string]bool{
-	"OWNER":       true,
-	"MEMBER":      true,
+	"OWNER":        true,
+	"MEMBER":       true,
 	"COLLABORATOR": true,
 }
 

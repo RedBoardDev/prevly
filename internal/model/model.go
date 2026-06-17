@@ -62,12 +62,12 @@ func (s Status) CanTransition(to Status) bool {
 // It is keyed by (repo, pr_number, app_name) and is the source of truth for
 // routing, lifecycle and garbage collection.
 type Preview struct {
-	Repo      string `json:"repo"`       // "owner/name"
-	PRNumber  int    `json:"pr_number"`  // pull request number
-	AppName   string `json:"app_name"`   // app name from .prevly.yml
-	Subdomain string `json:"subdomain"`  // app subdomain segment (may be empty)
-	URL       string `json:"url"`        // full https URL
-	Host      string `json:"host"`       // routing host, e.g. pr-42-bo.<base>
+	Repo      string `json:"repo"`      // "owner/name"
+	PRNumber  int    `json:"pr_number"` // pull request number
+	AppName   string `json:"app_name"`  // app name from .prevly.yml
+	Subdomain string `json:"subdomain"` // app subdomain segment (may be empty)
+	URL       string `json:"url"`       // full https URL
+	Host      string `json:"host"`      // routing host, e.g. pr-42-bo.<base>
 
 	ContainerID string `json:"container_id"`
 	ImageTag    string `json:"image_tag"`

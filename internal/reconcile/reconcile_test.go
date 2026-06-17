@@ -35,19 +35,39 @@ type fakeRuntime struct {
 	imgRm    []string
 }
 
-func (f *fakeRuntime) EnsureNetwork(_ context.Context, n string) error { f.netCreat = append(f.netCreat, n); return nil }
-func (f *fakeRuntime) RemoveNetwork(_ context.Context, n string) error { f.netRm = append(f.netRm, n); return nil }
+func (f *fakeRuntime) EnsureNetwork(_ context.Context, n string) error {
+	f.netCreat = append(f.netCreat, n)
+	return nil
+}
+func (f *fakeRuntime) RemoveNetwork(_ context.Context, n string) error {
+	f.netRm = append(f.netRm, n)
+	return nil
+}
 func (f *fakeRuntime) Run(_ context.Context, spec runtime.RunSpec) (string, int, error) {
 	if f.runErr != nil {
 		return "", 0, f.runErr
 	}
 	return f.runID, f.runPort, nil
 }
-func (f *fakeRuntime) Start(_ context.Context, id string) error  { f.started = append(f.started, id); return nil }
-func (f *fakeRuntime) Stop(_ context.Context, id string) error   { f.stopped = append(f.stopped, id); return nil }
-func (f *fakeRuntime) Remove(_ context.Context, id string) error { f.removed = append(f.removed, id); return nil }
-func (f *fakeRuntime) RemoveImage(_ context.Context, i string) error { f.imgRm = append(f.imgRm, i); return nil }
-func (f *fakeRuntime) ListManaged(context.Context) ([]runtime.Container, error) { return f.managed, nil }
+func (f *fakeRuntime) Start(_ context.Context, id string) error {
+	f.started = append(f.started, id)
+	return nil
+}
+func (f *fakeRuntime) Stop(_ context.Context, id string) error {
+	f.stopped = append(f.stopped, id)
+	return nil
+}
+func (f *fakeRuntime) Remove(_ context.Context, id string) error {
+	f.removed = append(f.removed, id)
+	return nil
+}
+func (f *fakeRuntime) RemoveImage(_ context.Context, i string) error {
+	f.imgRm = append(f.imgRm, i)
+	return nil
+}
+func (f *fakeRuntime) ListManaged(context.Context) ([]runtime.Container, error) {
+	return f.managed, nil
+}
 
 type fakeBuilder struct {
 	buildErr    error

@@ -3,8 +3,8 @@ package reconcile
 import (
 	"context"
 
-	gh "github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/config"
+	gh "github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/model"
 )
 
