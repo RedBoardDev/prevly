@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
 
 	gh "github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/model"
@@ -57,8 +58,20 @@ func (r *Reconciler) updateComment(ctx context.Context, ev *gh.PullRequestEvent)
 	}
 }
 
+// surfaceConfigError posts the validation error as the PR sticky comment so the
+// author sees exactly what is wrong with their .prevly.yml.
+func (r *Reconciler) surfaceConfigError(ctx context.Context, ev *gh.PullRequestEvent, cfgErr error) {
+	if ev.InstallationID == 0 {
+		return
+	}
+	body := gh.RenderConfigError(cfgErr)
+	if _, err := r.gh.UpsertComment(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.Number, body); err != nil {
+		r.logger.Warn("surface config error comment", "repo", ev.Repo, "pr", ev.Number, "err", err)
+	}
+}
+
 func deploymentEnv(p *model.Preview) string {
-	return "preview/" + p.Host
+	return fmt.Sprintf("preview/pr-%d-%s", p.PRNumber, p.AppName)
 }
 
 // liveURL returns the preview URL only when it is reachable.

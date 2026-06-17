@@ -53,6 +53,14 @@ func (r *Reconciler) deployApp(ctx context.Context, ev *gh.PullRequestEvent, rep
 		return err
 	}
 
+	if err := r.awaitReady(ctx, p, app); err != nil {
+		p.Status = model.StatusFailed
+		p.FailureLog = lastLines(err.Error(), 30)
+		_ = r.store.Put(p)
+		r.publish(ctx, ev, p)
+		return err
+	}
+
 	p.Status = model.StatusRunning
 	p.ImageTag = imageTag
 	p.CommitSHA = ev.HeadSHA

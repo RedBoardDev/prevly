@@ -40,6 +40,9 @@ type Reconciler struct {
 	workDir  string
 	buildSem chan struct{}
 
+	// readyTimeout bounds the post-deploy readiness wait.
+	readyTimeout time.Duration
+
 	// now is injectable for deterministic tests.
 	now func() time.Time
 }
@@ -59,9 +62,10 @@ func New(d Deps) *Reconciler {
 		secrets:  d.Secrets,
 		gh:       d.GitHub,
 		logger:   d.Logger,
-		workDir:  workDir,
-		buildSem: make(chan struct{}, builds),
-		now:      time.Now,
+		workDir:      workDir,
+		buildSem:     make(chan struct{}, builds),
+		readyTimeout: 30 * time.Second,
+		now:          time.Now,
 	}
 }
 

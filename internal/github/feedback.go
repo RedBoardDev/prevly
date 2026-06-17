@@ -44,6 +44,12 @@ func RenderStickyComment(apps []AppStatus) string {
 	return b.String()
 }
 
+// RenderConfigError renders a sticky comment reporting an invalid .prevly.yml.
+func RenderConfigError(err error) string {
+	return stickyMarker + "\n## prevly previews\n\n" +
+		"⚠️ Could not read `.prevly.yml`:\n\n```\n" + err.Error() + "\n```\n"
+}
+
 func statusBadge(s model.Status) string {
 	switch s {
 	case model.StatusRunning:

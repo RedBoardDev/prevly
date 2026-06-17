@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"path/filepath"
@@ -137,7 +138,20 @@ func newTestReconciler(t *testing.T, gh GitHub, rt runtime.Runtime, bld builder.
 		Logger:  applog.New(applog.Options{Level: "error", Out: io.Discard}),
 		WorkDir: t.TempDir(),
 	})
+	rec.readyTimeout = 2 * time.Second
 	return rec, st
+}
+
+// listenPort starts a TCP listener so readiness probes (and the proxy) succeed,
+// and returns the bound port.
+func listenPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln.Addr().(*net.TCPAddr).Port
 }
 
 func singleAppCfg() *config.RepoConfig {
@@ -163,7 +177,7 @@ func openedEvent() *gh.PullRequestEvent {
 func TestDeployHappyPath(t *testing.T) {
 	t.Parallel()
 	fg := &fakeGitHub{changed: []string{"src/app.tsx"}, repoCfg: singleAppCfg()}
-	frt := &fakeRuntime{runID: "cid", runPort: 40555}
+	frt := &fakeRuntime{runID: "cid", runPort: listenPort(t)}
 	rec, st := newTestReconciler(t, fg, frt, &fakeBuilder{})
 
 	if err := rec.HandlePullRequest(context.Background(), openedEvent()); err != nil {
@@ -176,7 +190,7 @@ func TestDeployHappyPath(t *testing.T) {
 	if p.Status != model.StatusRunning {
 		t.Fatalf("status = %q, want running", p.Status)
 	}
-	if p.Port != 40555 || p.ContainerID != "cid" {
+	if p.Port != frt.runPort || p.ContainerID != "cid" {
 		t.Fatalf("container not recorded: %+v", p)
 	}
 	if p.Host != "pr-42.preview.example.com" {
@@ -187,6 +201,53 @@ func TestDeployHappyPath(t *testing.T) {
 	}
 	if len(fg.statuses) == 0 || fg.statuses[len(fg.statuses)-1] != model.StatusRunning {
 		t.Fatalf("final deployment status not success: %v", fg.statuses)
+	}
+}
+
+func TestInvalidConfigSurfacedInPR(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{repoCfgErr: errors.New("app \"bo\": dockerfile is required")}
+	rec, st := newTestReconciler(t, fg, &fakeRuntime{}, &fakeBuilder{})
+
+	if err := rec.HandlePullRequest(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if fg.comments != 1 {
+		t.Fatalf("invalid config must post a PR comment, got %d", fg.comments)
+	}
+	if previews, _ := st.ListByPR("org/repo", 42); len(previews) != 0 {
+		t.Fatal("invalid config must not create previews")
+	}
+}
+
+func TestConfigNotFoundIsSilent(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{repoCfgErr: ErrConfigNotFound}
+	rec, _ := newTestReconciler(t, fg, &fakeRuntime{}, &fakeBuilder{})
+
+	if err := rec.HandlePullRequest(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if fg.comments != 0 {
+		t.Fatalf("a repo without .prevly.yml must stay silent, got %d comments", fg.comments)
+	}
+}
+
+func TestDeployReadinessTimeoutFails(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	// Port 1 has nothing listening, so the readiness probe must time out.
+	frt := &fakeRuntime{runID: "cid", runPort: 1}
+	rec, st := newTestReconciler(t, fg, frt, &fakeBuilder{})
+	rec.readyTimeout = 200 * time.Millisecond
+
+	_ = rec.HandlePullRequest(context.Background(), openedEvent())
+	p, err := st.Get("org/repo", 42, "web")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if p.Status != model.StatusFailed {
+		t.Fatalf("unready container should fail deploy, got %q", p.Status)
 	}
 }
 
@@ -225,7 +286,7 @@ func TestBuildFailureMarksFailed(t *testing.T) {
 func TestPRClosedTeardown(t *testing.T) {
 	t.Parallel()
 	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
-	frt := &fakeRuntime{runID: "cid", runPort: 2}
+	frt := &fakeRuntime{runID: "cid", runPort: listenPort(t)}
 	rec, st := newTestReconciler(t, fg, frt, &fakeBuilder{})
 	_ = rec.HandlePullRequest(context.Background(), openedEvent())
 

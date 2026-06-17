@@ -2,11 +2,16 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 
 	"github.com/RedBoardDev/prevly/internal/config"
 	gh "github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/model"
 )
+
+// ErrConfigNotFound means the repo has no .prevly.yml (it is simply not
+// onboarded), as opposed to a present-but-invalid config.
+var ErrConfigNotFound = errors.New("no .prevly.yml in repo")
 
 // GitHub is the subset of the GitHub App the reconciler depends on. It is an
 // interface so the orchestration can be tested with a fake.
@@ -35,6 +40,9 @@ func (a *appGitHub) ChangedFiles(ctx context.Context, installationID int64, owne
 
 func (a *appGitHub) RepoConfig(ctx context.Context, installationID int64, owner, repo, ref string) (*config.RepoConfig, error) {
 	data, err := gh.FetchFile(ctx, a.app.Client(installationID), owner, repo, ".prevly.yml", ref)
+	if errors.Is(err, gh.ErrFileNotFound) {
+		return nil, ErrConfigNotFound
+	}
 	if err != nil {
 		return nil, err
 	}

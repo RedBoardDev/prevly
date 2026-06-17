@@ -2,10 +2,16 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	gh "github.com/google/go-github/v66/github"
 )
+
+// ErrFileNotFound is returned by FetchFile when the path does not exist (HTTP
+// 404), letting callers distinguish "repo not onboarded" from a real error.
+var ErrFileNotFound = errors.New("file not found")
 
 // GetPullRequest fetches a PR and maps it to the same shape as a webhook event,
 // so ChatOps redeploys can reuse the deploy pipeline.
@@ -35,6 +41,10 @@ func GetPullRequest(ctx context.Context, client *gh.Client, owner, name string, 
 func FetchFile(ctx context.Context, client *gh.Client, owner, name, path, ref string) ([]byte, error) {
 	content, _, _, err := client.Repositories.GetContents(ctx, owner, name, path, &gh.RepositoryContentGetOptions{Ref: ref})
 	if err != nil {
+		var ge *gh.ErrorResponse
+		if errors.As(err, &ge) && ge.Response != nil && ge.Response.StatusCode == http.StatusNotFound {
+			return nil, ErrFileNotFound
+		}
 		return nil, fmt.Errorf("get %s@%s: %w", path, ref, err)
 	}
 	if content == nil {

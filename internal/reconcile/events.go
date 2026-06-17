@@ -32,9 +32,14 @@ func (r *Reconciler) deployFromEvent(ctx context.Context, ev *gh.PullRequestEven
 		return nil
 	}
 	repoCfg, err := r.gh.RepoConfig(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.HeadSHA)
+	if errors.Is(err, ErrConfigNotFound) {
+		r.logger.Info("repo not onboarded (no .prevly.yml)", "repo", ev.Repo, "pr", ev.Number)
+		return nil
+	}
 	if err != nil {
-		// A repo without a valid .prevly.yml is simply not onboarded.
-		r.logger.Info("skipping PR without usable .prevly.yml", "repo", ev.Repo, "pr", ev.Number, "err", err)
+		// A present-but-invalid .prevly.yml is a user error: surface it in the PR.
+		r.logger.Warn("invalid .prevly.yml", "repo", ev.Repo, "pr", ev.Number, "err", err)
+		r.surfaceConfigError(ctx, ev, err)
 		return nil
 	}
 	changed, err := r.gh.ChangedFiles(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.Number)

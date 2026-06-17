@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"time"
 
+	"github.com/RedBoardDev/prevly/internal/config"
 	"github.com/RedBoardDev/prevly/internal/ingress"
 	"github.com/RedBoardDev/prevly/internal/model"
 	"github.com/RedBoardDev/prevly/internal/store"
@@ -66,6 +68,46 @@ func (r *Reconciler) wake(ctx context.Context, p *model.Preview) error {
 
 func upstream(p *model.Preview) string {
 	return fmt.Sprintf("127.0.0.1:%d", p.Port)
+}
+
+// awaitReady blocks until the freshly-started container accepts connections and,
+// if a healthcheck path is configured, returns a non-5xx response.
+func (r *Reconciler) awaitReady(ctx context.Context, p *model.Preview, app config.AppConfig) error {
+	timeout := r.readyTimeout
+	if app.Healthcheck != nil && app.Healthcheck.Timeout > 0 {
+		timeout = app.Healthcheck.Timeout.Std()
+	}
+	if err := waitReady(ctx, p.Port, timeout); err != nil {
+		return err
+	}
+	if app.Healthcheck == nil || app.Healthcheck.Path == "" {
+		return nil
+	}
+	return waitHTTP(ctx, p.Port, app.Healthcheck.Path, timeout)
+}
+
+// waitHTTP polls an HTTP path until it returns a non-5xx status or times out.
+func waitHTTP(ctx context.Context, port int, path string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	url := fmt.Sprintf("http://127.0.0.1:%d%s", port, path)
+	client := &http.Client{Timeout: 3 * time.Second}
+	for {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := client.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode < 500 {
+				return nil
+			}
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("healthcheck %s not healthy within %s", path, timeout)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 // waitReady polls the upstream TCP port until it accepts a connection.
