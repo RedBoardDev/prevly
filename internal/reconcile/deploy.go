@@ -115,13 +115,18 @@ func (r *Reconciler) buildImage(ctx context.Context, ev *gh.PullRequestEvent, ap
 	}
 
 	contextDir := filepath.Join(checkoutDir, app.Context)
-	_, err = r.builder.Build(ctx, builder.BuildSpec{
+	res, err := r.builder.Build(ctx, builder.BuildSpec{
 		ContextDir: contextDir,
 		Dockerfile: app.Dockerfile,
 		ImageTag:   imageTag,
 		BuildArgs:  app.BuildArgs,
 	})
-	return err
+	if err != nil {
+		// Surface the build output: the docker error alone is just "exit status
+		// 1", useless for debugging a failed preview from the logs or PR feedback.
+		return fmt.Errorf("%w\n--- build output (tail) ---\n%s", err, lastLines(res.Log, 50))
+	}
+	return nil
 }
 
 func (r *Reconciler) runContainer(ctx context.Context, ev *gh.PullRequestEvent, app config.AppConfig, p *model.Preview, imageTag string) error {
