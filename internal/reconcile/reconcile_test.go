@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -144,16 +147,24 @@ func newTestReconciler(t *testing.T, gh GitHub, rt runtime.Runtime, bld builder.
 	return rec, st
 }
 
-// listenPort starts a TCP listener so readiness probes (and the proxy) succeed,
-// and returns the bound port.
+// listenPort starts an HTTP server and returns its port. Readiness probes now
+// require a real HTTP response (an open TCP port alone is fooled by docker's
+// port proxy), so the test upstream must speak HTTP.
 func listenPort(t *testing.T) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
 	if err != nil {
-		t.Fatalf("listen: %v", err)
+		t.Fatalf("parse test server url: %v", err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
-	return ln.Addr().(*net.TCPAddr).Port
+	port, err := strconv.Atoi(u.Port())
+	if err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+	return port
 }
 
 func singleAppCfg() *config.RepoConfig {
@@ -361,12 +372,7 @@ func TestReapOrphans(t *testing.T) {
 
 func TestResolveWakesSleeping(t *testing.T) {
 	t.Parallel()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-	port := ln.Addr().(*net.TCPAddr).Port
+	port := listenPort(t)
 
 	frt := &fakeRuntime{}
 	rec, st := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})

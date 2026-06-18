@@ -58,12 +58,27 @@ func (r *Reconciler) wake(ctx context.Context, p *model.Preview) error {
 	if err := r.runtime.Start(ctx, p.ContainerID); err != nil {
 		return fmt.Errorf("wake start: %w", err)
 	}
-	if err := waitReady(ctx, p.Port, 10*time.Second); err != nil {
+	// TCP accepts as soon as docker's port proxy binds — before the app listens —
+	// so probe HTTP: only route once the app actually responds, else the first
+	// request after a wake hits an empty upstream and gets a 502.
+	if err := waitHTTP(ctx, p.Port, "/", r.readyTimeout); err != nil {
 		return fmt.Errorf("wake readiness: %w", err)
 	}
 	p.Status = model.StatusRunning
 	p.LastSeenAt = r.now()
-	return r.store.Put(p)
+	if err := r.store.Put(p); err != nil {
+		return err
+	}
+	go r.publishPreviewAsync(p) // reflect 🟢 live again, off the request path
+	return nil
+}
+
+// publishPreviewAsync publishes PR feedback off the request path: the request
+// context is canceled once the response is sent, so use a fresh bounded one.
+func (r *Reconciler) publishPreviewAsync(p *model.Preview) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r.publishPreview(ctx, p)
 }
 
 func upstream(p *model.Preview) string {
@@ -80,10 +95,13 @@ func (r *Reconciler) awaitReady(ctx context.Context, p *model.Preview, app confi
 	if err := waitReady(ctx, p.Port, timeout); err != nil {
 		return err
 	}
-	if app.Healthcheck == nil || app.Healthcheck.Path == "" {
-		return nil
+	// Default to probing "/" when no healthcheck is configured: a TCP accept
+	// alone is fooled by docker's port proxy, so wait until the app serves HTTP.
+	path := "/"
+	if app.Healthcheck != nil && app.Healthcheck.Path != "" {
+		path = app.Healthcheck.Path
 	}
-	return waitHTTP(ctx, p.Port, app.Healthcheck.Path, timeout)
+	return waitHTTP(ctx, p.Port, path, timeout)
 }
 
 // waitHTTP polls an HTTP path until it returns a non-5xx status or times out.

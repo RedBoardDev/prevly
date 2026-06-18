@@ -87,6 +87,7 @@ func (r *Reconciler) upsertBuilding(ev *gh.PullRequestEvent, repoCfg *config.Rep
 	}
 	p.Host = host
 	p.URL = url
+	p.InstallationID = ev.InstallationID
 	p.Status = model.StatusBuilding
 	p.TTL = r.ttlFor(repoCfg)
 	p.Idle = r.idleFor(repoCfg)

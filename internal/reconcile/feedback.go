@@ -3,10 +3,31 @@ package reconcile
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	gh "github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/model"
 )
+
+// publishPreview reflects a preview's state to GitHub from the reconcile loop
+// (sleep, wake, TTL) where there is no webhook event: it reconstructs the
+// minimal context from the stored preview. No-op if the installation is unknown.
+func (r *Reconciler) publishPreview(ctx context.Context, p *model.Preview) {
+	if p.InstallationID == 0 {
+		return
+	}
+	owner, name, ok := strings.Cut(p.Repo, "/")
+	if !ok {
+		return
+	}
+	r.publish(ctx, &gh.PullRequestEvent{
+		Repo:           p.Repo,
+		Owner:          owner,
+		Name:           name,
+		Number:         p.PRNumber,
+		InstallationID: p.InstallationID,
+	}, p)
+}
 
 // publish reflects a preview's current state to GitHub: it advances the per-app
 // Deployment and refreshes the PR's sticky comment. Feedback failures are

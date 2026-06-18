@@ -73,7 +73,9 @@ func (r *Reconciler) sleep(ctx context.Context, p *model.Preview) {
 	p.Status = model.StatusSleeping
 	if err := r.store.Put(p); err != nil {
 		r.logger.Error("sleep persist", "host", p.Host, "err", err)
+		return
 	}
+	r.publishPreview(ctx, p) // reflect 💤 sleeping on the PR
 }
 
 // reapOrphans removes managed containers that have no live preview record

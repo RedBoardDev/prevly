@@ -81,8 +81,9 @@ type Preview struct {
 	TTL        time.Duration `json:"ttl"`
 	Idle       time.Duration `json:"idle"`
 
-	DeploymentID int64 `json:"deployment_id"` // GitHub Deployment id
-	CommentID    int64 `json:"comment_id"`    // sticky PR comment id
+	DeploymentID   int64 `json:"deployment_id"`   // GitHub Deployment id
+	CommentID      int64 `json:"comment_id"`      // sticky PR comment id
+	InstallationID int64 `json:"installation_id"` // App installation, for loop-driven feedback (sleep/wake/TTL)
 
 	FailureLog string `json:"failure_log,omitempty"`
 }
