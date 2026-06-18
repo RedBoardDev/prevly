@@ -18,8 +18,6 @@
   },
   "default_events": [
     "pull_request",
-    "issue_comment",
-    "installation",
-    "installation_repositories"
+    "issue_comment"
   ]
 }

@@ -147,14 +147,16 @@ func (c *HostConfig) Validate() error {
 	if c.TLS.Email == "" {
 		return fmt.Errorf("tls.email (ACME account email) is required")
 	}
-	if c.GitHub.AppID == 0 {
-		return fmt.Errorf("github.app_id is required")
-	}
-	if c.GitHub.PrivateKeyPath == "" {
-		return fmt.Errorf("github.private_key_path is required")
-	}
-	if c.GitHub.WebhookSecretEnv == "" {
-		return fmt.Errorf("github.webhook_secret_env is required")
+	// The GitHub App is optional in config: when app_id is unset the daemon
+	// creates one through the in-daemon setup flow and persists it under
+	// data_dir. Only validate the App fields when an App is pinned in config.
+	if c.GitHub.AppID != 0 {
+		if c.GitHub.PrivateKeyPath == "" {
+			return fmt.Errorf("github.private_key_path is required when github.app_id is set")
+		}
+		if c.GitHub.WebhookSecretEnv == "" {
+			return fmt.Errorf("github.webhook_secret_env is required when github.app_id is set")
+		}
 	}
 	return nil
 }

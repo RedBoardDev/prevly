@@ -8,10 +8,14 @@ tls:
   provider: route53                # route53 | cloudflare
   email: ops@example.com           # ACME account email
 
-github:
-  app_id: 123456
-  private_key_path: /etc/prevly/github-app.pem
-  webhook_secret_env: PREVLY_WEBHOOK_SECRET
+# GitHub App — OPTIONAL. Leave this out to create the App through the in-daemon
+# setup flow: start the daemon, then open https://<base_domain>/setup (the URL
+# with a one-time token is printed to the logs). Credentials are persisted under
+# data_dir. Set this block only to pin an App you created/manage manually.
+# github:
+#   app_id: 123456
+#   private_key_path: /etc/prevly/github-app.pem
+#   webhook_secret_env: PREVLY_WEBHOOK_SECRET
 
 secrets:                           # logical name -> env:VAR (resolved at runtime)
   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: env:PREVLY_SECRET_SA_KEY

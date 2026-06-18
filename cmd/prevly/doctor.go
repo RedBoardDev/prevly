@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/RedBoardDev/prevly/internal/config"
+	"github.com/RedBoardDev/prevly/internal/setup"
 )
 
 func newDoctorCmd(g *globalFlags) *cobra.Command {
@@ -35,6 +36,16 @@ func newDoctorCmd(g *globalFlags) *cobra.Command {
 			check("host config", err)
 			if err == nil {
 				check("data dir writable", checkWritable(cfg.DataDir))
+				switch creds, _, ok, lerr := setup.Load(cfg.DataDir); {
+				case lerr != nil:
+					check("github app credentials", lerr)
+				case ok:
+					fmt.Fprintf(out, "[ OK ] github app configured (app_id %d)\n", creds.AppID)
+				case cfg.GitHub.AppID != 0:
+					fmt.Fprintf(out, "[ OK ] github app pinned in config (app_id %d)\n", cfg.GitHub.AppID)
+				default:
+					warn("github app", fmt.Sprintf("not set up yet — start the daemon and open https://%s/setup", cfg.BaseDomain))
+				}
 				for name, ref := range cfg.Secrets {
 					if looksSecretButPresent(ref) {
 						warn("secret "+name, "value present; ensure it is non-prod (previews must carry no prod secrets)")

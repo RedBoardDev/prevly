@@ -42,18 +42,20 @@ On a Docker host with a public IP and a wildcard DNS record
 
 ```sh
 go build ./cmd/prevly                       # or grab a release binary
-cp examples/config.yaml /etc/prevly/config.yaml   # edit base_domain, tls, github
+cp examples/config.yaml /etc/prevly/config.yaml   # edit base_domain, tls
 cp examples/env.example /etc/prevly/prevly.env    # fill secrets (never commit)
 install -m644 packaging/prevly.service /etc/systemd/system/prevly.service
 systemctl enable --now prevly
 ```
 
-Then create a GitHub App — the manifest at
-[`packaging/github-app-manifest.json`](./packaging/github-app-manifest.json)
-pre-fills the permissions and events — point its webhook at
-`https://<base_domain>/webhook`, install it on your repos, and add a
-`.prevly.yml` (`prevly init` scaffolds one; see
-[`examples/.prevly.yml`](./examples/.prevly.yml)).
+On first start, with no GitHub App configured, prevly serves a one-time **setup
+page** on your domain: open the URL printed in the logs
+(`https://<base_domain>/setup?token=…`), choose a name (and optional org), and
+prevly runs GitHub's App-manifest flow for you — the App is created with the
+right permissions and webhook, and its credentials are persisted under
+`data_dir`. Then install the App on your repos and add a `.prevly.yml`
+(`prevly init` scaffolds one; see [`examples/.prevly.yml`](./examples/.prevly.yml)).
+No localhost dance, no copying secrets around.
 
 ## CLI
 

@@ -163,6 +163,16 @@ func TestParseHostConfigValid(t *testing.T) {
 	}
 }
 
+func TestParseHostConfigSetupModeValid(t *testing.T) {
+	t.Parallel()
+	// No GitHub App configured: valid — the daemon enters the in-daemon setup
+	// flow and persists an App under data_dir.
+	yaml := "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ndata_dir: /var/lib/prevly\n"
+	if _, err := ParseHostConfig([]byte(yaml)); err != nil {
+		t.Fatalf("config without a github app should be valid (setup mode): %v", err)
+	}
+}
+
 func TestHostConfigValidationErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -174,7 +184,8 @@ func TestHostConfigValidationErrors(t *testing.T) {
 		{"wildcard base_domain", "base_domain: \"*.x.com\"\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "bare domain"},
 		{"bad tls mode", "base_domain: x.com\ntls: {mode: bogus, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.mode"},
 		{"dns01 needs provider", "base_domain: x.com\ntls: {mode: dns-01, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.provider is required"},
-		{"missing app_id", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {private_key_path: k, webhook_secret_env: W}\n", "github.app_id"},
+		{"app_id without key", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, webhook_secret_env: W}\n", "private_key_path is required"},
+		{"app_id without webhook env", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k}\n", "webhook_secret_env is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
