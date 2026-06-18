@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	applog "github.com/RedBoardDev/prevly/internal/log"
 )
@@ -14,16 +15,33 @@ import (
 type captureHandler struct {
 	pr      *PullRequestEvent
 	comment *IssueCommentEvent
+	done    chan struct{}
+}
+
+func newCapture() *captureHandler {
+	return &captureHandler{done: make(chan struct{}, 4)}
 }
 
 func (c *captureHandler) HandlePullRequest(_ context.Context, e *PullRequestEvent) error {
 	c.pr = e
+	c.done <- struct{}{}
 	return nil
 }
 
 func (c *captureHandler) HandleIssueComment(_ context.Context, e *IssueCommentEvent) error {
 	c.comment = e
+	c.done <- struct{}{}
 	return nil
+}
+
+// waitFor blocks until the (async) handler signals, or fails after a timeout.
+func waitFor(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler not invoked within timeout")
+	}
 }
 
 func testLogger() *applog.Logger {
@@ -47,28 +65,33 @@ func post(t *testing.T, h http.Handler, secret, event, body string, sigOverride 
 func TestWebhookHandlerDispatch(t *testing.T) {
 	t.Parallel()
 	secret := "s3cr3t"
-	cap := &captureHandler{}
-	h := NewWebhookHandler(secret, cap, testLogger())
+	cap := newCapture()
+	h := NewWebhookHandler(context.Background(), secret, cap, testLogger())
 
 	rec := post(t, h, secret, "pull_request", prPayload, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d", rec.Code)
 	}
+	waitFor(t, cap.done)
 	if cap.pr == nil || cap.pr.Number != 42 {
 		t.Fatalf("pull_request not dispatched: %+v", cap.pr)
 	}
 
 	rec = post(t, h, secret, "issue_comment", commentPayload, nil)
-	if rec.Code != http.StatusOK || cap.comment == nil || cap.comment.Number != 42 {
-		t.Fatalf("issue_comment not dispatched: code=%d %+v", rec.Code, cap.comment)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("issue_comment status = %d", rec.Code)
+	}
+	waitFor(t, cap.done)
+	if cap.comment == nil || cap.comment.Number != 42 {
+		t.Fatalf("issue_comment not dispatched: %+v", cap.comment)
 	}
 }
 
 func TestWebhookHandlerRejectsBadSignature(t *testing.T) {
 	t.Parallel()
 	secret := "s3cr3t"
-	cap := &captureHandler{}
-	h := NewWebhookHandler(secret, cap, testLogger())
+	cap := newCapture()
+	h := NewWebhookHandler(context.Background(), secret, cap, testLogger())
 
 	bad := "sha256=deadbeef"
 	rec := post(t, h, secret, "pull_request", prPayload, &bad)
@@ -83,7 +106,7 @@ func TestWebhookHandlerRejectsBadSignature(t *testing.T) {
 func TestWebhookHandlerIgnoresUnknownEvents(t *testing.T) {
 	t.Parallel()
 	secret := "s3cr3t"
-	h := NewWebhookHandler(secret, &captureHandler{}, testLogger())
+	h := NewWebhookHandler(context.Background(), secret, newCapture(), testLogger())
 	rec := post(t, h, secret, "ping", `{}`, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ping should be 200, got %d", rec.Code)

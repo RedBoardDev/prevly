@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	applog "github.com/RedBoardDev/prevly/internal/log"
 )
@@ -20,6 +21,9 @@ type EventHandler interface {
 // WebhookHandler is the HTTP handler for GitHub webhooks. It verifies the HMAC
 // signature, parses the event, and dispatches to an EventHandler.
 type WebhookHandler struct {
+	// baseCtx is the daemon's lifetime context; webhook work runs under it (with
+	// a per-event timeout) rather than the short-lived HTTP request context.
+	baseCtx context.Context
 	secret  string
 	handler EventHandler
 	logger  *applog.Logger
@@ -28,9 +32,10 @@ type WebhookHandler struct {
 	maxBody int64
 }
 
-// NewWebhookHandler builds a WebhookHandler.
-func NewWebhookHandler(secret string, handler EventHandler, logger *applog.Logger) *WebhookHandler {
-	return &WebhookHandler{secret: secret, handler: handler, logger: logger, maxBody: 5 << 20}
+// NewWebhookHandler builds a WebhookHandler. baseCtx should be the daemon's run
+// context so background processing stops cleanly on shutdown.
+func NewWebhookHandler(baseCtx context.Context, secret string, handler EventHandler, logger *applog.Logger) *WebhookHandler {
+	return &WebhookHandler{baseCtx: baseCtx, secret: secret, handler: handler, logger: logger, maxBody: 5 << 20}
 }
 
 func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,16 +55,20 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventType := r.Header.Get("X-GitHub-Event")
-	if err := h.dispatch(r.Context(), eventType, body); err != nil {
-		if errors.Is(err, errIgnoredEvent) {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		h.logger.Error("handle webhook", "event", eventType, "err", err)
-		http.Error(w, "handler error", http.StatusInternalServerError)
-		return
-	}
+	// Acknowledge immediately: a build takes minutes, far beyond GitHub's webhook
+	// delivery timeout, and the request context is canceled the moment this
+	// returns. Process under the daemon's context in the background instead — so
+	// GitHub doesn't time out and retry, and the deploy isn't aborted mid-flight.
 	w.WriteHeader(http.StatusOK)
+	go h.process(eventType, body)
+}
+
+func (h *WebhookHandler) process(eventType string, body []byte) {
+	ctx, cancel := context.WithTimeout(h.baseCtx, 30*time.Minute)
+	defer cancel()
+	if err := h.dispatch(ctx, eventType, body); err != nil && !errors.Is(err, errIgnoredEvent) {
+		h.logger.Error("handle webhook", "event", eventType, "err", err)
+	}
 }
 
 var errIgnoredEvent = errors.New("ignored event")

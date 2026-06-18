@@ -143,7 +143,7 @@ func runNormal(ctx context.Context, logger *applog.Logger, cfg *config.HostConfi
 	})
 
 	proxy := ingress.NewProxy(rec, cfg, logger)
-	proxy.SetControlHandler(controlMux(creds.WebhookSecret, rec, logger))
+	proxy.SetControlHandler(controlMux(ctx, creds.WebhookSecret, rec, logger))
 
 	logger.Info("prevly daemon starting", "version", version, "base_domain", cfg.BaseDomain, "app_id", creds.AppID)
 
@@ -169,9 +169,9 @@ func (noopResolver) Resolve(context.Context, string) (ingress.Target, bool, erro
 
 func (noopResolver) Known(string) bool { return false }
 
-func controlMux(webhookSecret string, h github.EventHandler, logger *applog.Logger) http.Handler {
+func controlMux(ctx context.Context, webhookSecret string, h github.EventHandler, logger *applog.Logger) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/webhook", github.NewWebhookHandler(webhookSecret, h, logger))
+	mux.Handle("/webhook", github.NewWebhookHandler(ctx, webhookSecret, h, logger))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
