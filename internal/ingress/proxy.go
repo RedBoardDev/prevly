@@ -106,11 +106,19 @@ func (p *Proxy) Run(ctx context.Context) error {
 	}
 
 	if p.tls.Mode == config.TLSModeDNS01 {
-		// Obtain the single wildcard cert up front; new subdomains need no issuance.
-		domains := []string{p.baseDomain, "*." + p.baseDomain}
-		if err := magic.ManageAsync(ctx, domains); err != nil {
-			return fmt.Errorf("manage wildcard cert: %w", err)
-		}
+		// Obtain the apex and wildcard certs one at a time, in the background so
+		// serving starts immediately. Both validate via the same
+		// _acme-challenge.<base_domain> DNS record, so issuing them concurrently
+		// races on the Route53 record set (one challenge clobbers the other).
+		// Serialized issuance avoids that. The apex is obtained first since it
+		// serves the webhook and setup endpoints; the wildcard covers previews.
+		go func() {
+			for _, d := range []string{p.baseDomain, "*." + p.baseDomain} {
+				if err := magic.ManageSync(ctx, []string{d}); err != nil {
+					p.logger.Error("obtain certificate", "domain", d, "err", err)
+				}
+			}
+		}()
 	}
 
 	tlsConf := magic.TLSConfig()
