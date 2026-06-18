@@ -24,6 +24,12 @@ func (b *DockerBuilder) Checkout(ctx context.Context, opts CheckoutOptions) erro
 	if err != nil {
 		return err
 	}
+	// A redeploy (PR synchronize) reuses the same dir; start from a clean tree so
+	// `git init` / `remote add` are deterministic instead of failing on an
+	// existing repo.
+	if err := os.RemoveAll(opts.Dir); err != nil {
+		return fmt.Errorf("clean checkout dir: %w", err)
+	}
 	if err := os.MkdirAll(opts.Dir, 0o700); err != nil {
 		return fmt.Errorf("create checkout dir: %w", err)
 	}
