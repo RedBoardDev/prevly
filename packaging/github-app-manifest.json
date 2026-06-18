@@ -10,7 +10,7 @@
   },
   "default_permissions": {
     "contents": "read",
-    "pull_requests": "read",
+    "pull_requests": "write",
     "deployments": "write",
     "issues": "write",
     "checks": "write",

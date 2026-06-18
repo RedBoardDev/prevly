@@ -107,7 +107,7 @@ func appManifest(name, baseDomain, redirectURL string) manifest {
 		Public:         false,
 		DefaultPermissions: map[string]string{
 			"contents":      "read",
-			"pull_requests": "read",
+			"pull_requests": "write", // comment on PRs (issues-comments on a PR checks this perm)
 			"deployments":   "write",
 			"issues":        "write",
 			"checks":        "write",
