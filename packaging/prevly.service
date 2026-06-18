@@ -11,6 +11,10 @@ ExecStart=/usr/local/bin/prevly run --config /etc/prevly/config.yaml
 # Secrets and provider credentials are loaded from the environment, never from
 # the YAML config (mode 600, owned by the prevly user).
 EnvironmentFile=/etc/prevly/prevly.env
+# ProtectHome makes /root inaccessible, so point HOME (and the docker CLI config)
+# at the writable data dir — otherwise `docker`/`git` fail to create ~/.docker.
+Environment=HOME=/var/lib/prevly
+Environment=DOCKER_CONFIG=/var/lib/prevly/.docker
 Restart=on-failure
 RestartSec=5s
 
