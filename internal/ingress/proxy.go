@@ -165,7 +165,15 @@ func (p *Proxy) certmagic(_ context.Context) (*certmagic.Config, *certmagic.ACME
 		if err != nil {
 			return nil, nil, err
 		}
-		tmpl.DNS01Solver = &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{DNSProvider: provider}}
+		// Route53 is eventually consistent across its authoritative nameservers,
+		// and Let's Encrypt validates from multiple perspectives. Wait for the
+		// challenge record to propagate before asking ACME to validate, else
+		// secondary validation can fail with "No TXT record found".
+		tmpl.DNS01Solver = &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{
+			DNSProvider:        provider,
+			PropagationDelay:   30 * time.Second,
+			PropagationTimeout: 5 * time.Minute,
+		}}
 	case config.TLSModeOnDemand:
 		magic.OnDemand = &certmagic.OnDemandConfig{DecisionFunc: p.onDemandDecision}
 	default:
