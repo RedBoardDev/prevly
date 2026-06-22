@@ -21,6 +21,7 @@ type GitHub interface {
 	PullRequest(ctx context.Context, installationID int64, owner, repo string, pr int) (*gh.PullRequestEvent, error)
 	CloneToken(ctx context.Context, installationID int64) (string, error)
 	UpsertComment(ctx context.Context, installationID int64, owner, repo string, pr int, body string) (int64, error)
+	Reply(ctx context.Context, installationID int64, owner, repo string, pr int, body string) error
 	CreateDeployment(ctx context.Context, installationID int64, owner, repo, ref, environment string) (int64, error)
 	SetDeploymentStatus(ctx context.Context, installationID int64, owner, repo string, deploymentID int64, status model.Status, url string) error
 }
@@ -59,6 +60,10 @@ func (a *appGitHub) CloneToken(ctx context.Context, installationID int64) (strin
 
 func (a *appGitHub) UpsertComment(ctx context.Context, installationID int64, owner, repo string, pr int, body string) (int64, error) {
 	return gh.NewFeedback(a.app.Client(installationID)).UpsertComment(ctx, owner, repo, pr, body)
+}
+
+func (a *appGitHub) Reply(ctx context.Context, installationID int64, owner, repo string, pr int, body string) error {
+	return gh.NewFeedback(a.app.Client(installationID)).Reply(ctx, owner, repo, pr, body)
 }
 
 func (a *appGitHub) CreateDeployment(ctx context.Context, installationID int64, owner, repo, ref, environment string) (int64, error) {

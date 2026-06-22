@@ -6,6 +6,7 @@ import (
 
 	"github.com/RedBoardDev/prevly/internal/config"
 	gh "github.com/RedBoardDev/prevly/internal/github"
+	"github.com/RedBoardDev/prevly/internal/model"
 )
 
 // HandlePullRequest reacts to pull_request webhooks. It implements
@@ -79,6 +80,8 @@ func (r *Reconciler) HandleIssueComment(ctx context.Context, ev *gh.IssueComment
 	}
 
 	switch cmd.Action {
+	case gh.ActionHelp:
+		return r.gh.Reply(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.Number, gh.HelpText())
 	case gh.ActionStatus:
 		r.updateComment(ctx, prEventFromComment(ev))
 		return nil
@@ -90,11 +93,43 @@ func (r *Reconciler) HandleIssueComment(ctx context.Context, ev *gh.IssueComment
 		r.logger.Info("chatops destroy", "repo", ev.Repo, "pr", ev.Number, "app", cmd.App, "count", n)
 		r.updateComment(ctx, prEventFromComment(ev))
 		return nil
+	case gh.ActionWake:
+		return r.wakePR(ctx, ev, cmd.App)
 	case gh.ActionRedeploy:
 		return r.redeploy(ctx, ev, cmd.App)
 	default:
 		return nil
 	}
+}
+
+// wakePR wakes a PR's previews on demand (recreating any whose container was
+// pruned). If nothing is wakeable it falls back to a full redeploy. The sticky
+// comment is refreshed so the link status reflects the result.
+func (r *Reconciler) wakePR(ctx context.Context, ev *gh.IssueCommentEvent, app string) error {
+	previews, err := r.store.ListByPR(ev.Repo, ev.Number)
+	if err != nil {
+		return err
+	}
+	var woke int
+	for _, p := range previews {
+		if app != "" && p.AppName != app {
+			continue
+		}
+		if p.Status == model.StatusDestroyed {
+			continue
+		}
+		if err := r.wake(ctx, p); err != nil {
+			r.logger.Error("chatops wake", "host", p.Host, "err", err)
+			continue
+		}
+		woke++
+	}
+	if woke == 0 {
+		// Nothing wakeable (never deployed, or image gone) — rebuild from scratch.
+		return r.redeploy(ctx, ev, app)
+	}
+	r.updateComment(ctx, prEventFromComment(ev))
+	return nil
 }
 
 func (r *Reconciler) redeploy(ctx context.Context, ev *gh.IssueCommentEvent, app string) error {

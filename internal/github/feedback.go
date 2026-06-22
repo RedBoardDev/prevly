@@ -129,6 +129,16 @@ func (f *APIFeedback) UpsertComment(ctx context.Context, owner, repo string, pr 
 	return created.GetID(), nil
 }
 
+// Reply posts a plain (non-sticky) comment, used for one-off replies like the
+// command help.
+func (f *APIFeedback) Reply(ctx context.Context, owner, repo string, pr int, body string) error {
+	_, _, err := f.client.Issues.CreateComment(ctx, owner, repo, pr, &gh.IssueComment{Body: &body})
+	if err != nil {
+		return fmt.Errorf("post reply: %w", err)
+	}
+	return nil
+}
+
 // CreateDeployment creates a native Deployment for an app's preview.
 func (f *APIFeedback) CreateDeployment(ctx context.Context, owner, repo, ref, environment string) (int64, error) {
 	autoMerge := false

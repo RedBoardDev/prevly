@@ -25,19 +25,21 @@ import (
 // --- fakes ---
 
 type fakeRuntime struct {
-	runID   string
-	runPort int
-	runErr  error
+	runID    string
+	runPort  int
+	runErr   error
+	startErr error
 
 	managed []runtime.Container
 
-	started  []string
-	stopped  []string
-	removed  []string
-	netCreat []string
-	netRm    []string
-	imgRm    []string
-	pruned   int
+	started   []string
+	stopped   []string
+	removed   []string
+	netCreat  []string
+	netRm     []string
+	imgRm     []string
+	pruned    int
+	imageGone bool
 }
 
 func (f *fakeRuntime) EnsureNetwork(_ context.Context, n string) error {
@@ -56,7 +58,7 @@ func (f *fakeRuntime) Run(_ context.Context, spec runtime.RunSpec) (string, int,
 }
 func (f *fakeRuntime) Start(_ context.Context, id string) error {
 	f.started = append(f.started, id)
-	return nil
+	return f.startErr
 }
 func (f *fakeRuntime) Stop(_ context.Context, id string) error {
 	f.stopped = append(f.stopped, id)
@@ -74,6 +76,9 @@ func (f *fakeRuntime) ListManaged(context.Context) ([]runtime.Container, error) 
 	return f.managed, nil
 }
 func (f *fakeRuntime) PruneDangling(context.Context) error { f.pruned++; return nil }
+func (f *fakeRuntime) ImageExists(context.Context, string) (bool, error) {
+	return !f.imageGone, nil
+}
 
 type fakeBuilder struct {
 	buildErr    error
@@ -92,6 +97,7 @@ type fakeGitHub struct {
 	pr         *gh.PullRequestEvent
 
 	comments    int
+	replies     int
 	deployments int
 	statuses    []model.Status
 }
@@ -109,6 +115,10 @@ func (f *fakeGitHub) CloneToken(context.Context, int64) (string, error) { return
 func (f *fakeGitHub) UpsertComment(context.Context, int64, string, string, int, string) (int64, error) {
 	f.comments++
 	return 1, nil
+}
+func (f *fakeGitHub) Reply(context.Context, int64, string, string, int, string) error {
+	f.replies++
+	return nil
 }
 func (f *fakeGitHub) CreateDeployment(context.Context, int64, string, string, string, string) (int64, error) {
 	f.deployments++
@@ -318,7 +328,11 @@ func TestPRClosedTeardown(t *testing.T) {
 
 func TestTickSleepsIdle(t *testing.T) {
 	t.Parallel()
-	frt := &fakeRuntime{}
+	// The container is present (listed by docker); the reconciler should sleep it,
+	// not treat it as missing.
+	frt := &fakeRuntime{managed: []runtime.Container{
+		{ID: "cid", Name: model.ContainerName("org/repo", 1, "web"), Repo: "org/repo", PR: 1, App: "web"},
+	}}
 	rec, st := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
 	now := time.Now()
 	rec.now = func() time.Time { return now }
@@ -357,6 +371,86 @@ func TestTickDestroysExpired(t *testing.T) {
 	}
 }
 
+func TestHealRecreatesMissingContainer(t *testing.T) {
+	t.Parallel()
+	// Container was pruned out from under prevly: store says running but
+	// ListManaged returns nothing. The reconciler must recreate it from the image.
+	frt := &fakeRuntime{runID: "recreated", runPort: listenPort(t)}
+	rec, st := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
+	now := time.Now()
+	rec.now = func() time.Time { return now }
+
+	p := &model.Preview{
+		Repo: "org/repo", PRNumber: 1, AppName: "web", Host: "pr-1.preview.example.com",
+		ContainerID: "old-gone", ImageTag: "img", NetworkName: "net", ContainerPort: 3000,
+		Status: model.StatusRunning, TTL: 30 * 24 * time.Hour, LastSeenAt: now,
+	}
+	_ = st.Put(p)
+
+	rec.Tick(context.Background())
+
+	got, _ := st.Get("org/repo", 1, "web")
+	if got.Status != model.StatusRunning {
+		t.Fatalf("status = %q, want running", got.Status)
+	}
+	if got.ContainerID != "recreated" {
+		t.Fatalf("container not recreated: %q", got.ContainerID)
+	}
+	if len(frt.netCreat) == 0 {
+		t.Fatal("network should be ensured before recreate")
+	}
+}
+
+func TestHealImageGoneMarksFailed(t *testing.T) {
+	t.Parallel()
+	frt := &fakeRuntime{runID: "x", runPort: 1, imageGone: true}
+	rec, st := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
+	now := time.Now()
+	rec.now = func() time.Time { return now }
+
+	p := &model.Preview{
+		Repo: "org/repo", PRNumber: 1, AppName: "web", Host: "h",
+		ContainerID: "gone", ImageTag: "img", NetworkName: "net", ContainerPort: 3000,
+		Status: model.StatusSleeping, TTL: 30 * 24 * time.Hour, LastSeenAt: now,
+	}
+	_ = st.Put(p)
+
+	rec.Tick(context.Background())
+
+	got, _ := st.Get("org/repo", 1, "web")
+	if got.Status != model.StatusFailed {
+		t.Fatalf("status = %q, want failed (image gone, cannot recreate)", got.Status)
+	}
+}
+
+func TestWakeRecreatesMissingContainer(t *testing.T) {
+	t.Parallel()
+	frt := &fakeRuntime{
+		runID:    "woken",
+		runPort:  listenPort(t),
+		startErr: errors.New("Error response from daemon: No such container: old"),
+	}
+	rec, st := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
+	p := &model.Preview{
+		Repo: "org/repo", PRNumber: 1, AppName: "web", Host: "pr-1.preview.example.com",
+		ContainerID: "old", ImageTag: "img", NetworkName: "net", ContainerPort: 3000,
+		Status: model.StatusSleeping,
+	}
+	_ = st.Put(p)
+
+	target, ok, err := rec.Resolve(context.Background(), "pr-1.preview.example.com")
+	if err != nil || !ok {
+		t.Fatalf("resolve: ok=%v err=%v", ok, err)
+	}
+	if target.Upstream != upstream(&model.Preview{Port: frt.runPort}) {
+		t.Fatalf("upstream not pointing at recreated container: %s", target.Upstream)
+	}
+	got, _ := st.Get("org/repo", 1, "web")
+	if got.Status != model.StatusRunning || got.ContainerID != "woken" {
+		t.Fatalf("wake did not recreate: %+v", got)
+	}
+}
+
 func TestReapOrphans(t *testing.T) {
 	t.Parallel()
 	frt := &fakeRuntime{managed: []runtime.Container{
@@ -364,7 +458,7 @@ func TestReapOrphans(t *testing.T) {
 	}}
 	rec, _ := newTestReconciler(t, &fakeGitHub{}, frt, &fakeBuilder{})
 
-	rec.reapOrphans(context.Background())
+	rec.reapOrphans(context.Background(), frt.managed)
 	if len(frt.removed) != 1 || frt.removed[0] != "orphan" {
 		t.Fatalf("orphan should be removed, got %v", frt.removed)
 	}
