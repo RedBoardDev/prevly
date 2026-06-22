@@ -68,11 +68,17 @@ type Preview struct {
 	URL       string `json:"url"`       // full https URL
 	Host      string `json:"host"`      // routing host, e.g. pr-42-bo.<base>
 
-	ContainerID string `json:"container_id"`
-	ImageTag    string `json:"image_tag"`
-	NetworkName string `json:"network_name"`
-	CommitSHA   string `json:"commit_sha"`
-	Port        int    `json:"port"`
+	ContainerID   string `json:"container_id"`
+	ImageTag      string `json:"image_tag"`
+	NetworkName   string `json:"network_name"`
+	CommitSHA     string `json:"commit_sha"`
+	Port          int    `json:"port"`           // published 127.0.0.1 host port
+	ContainerPort int    `json:"container_port"` // app port inside the container
+
+	// RunEnv is the resolved runtime env+secrets used to start the container,
+	// kept so a vanished container can be recreated from its image without
+	// re-fetching the repo config (self-healing after an external docker prune).
+	RunEnv map[string]string `json:"run_env,omitempty"`
 
 	Status Status `json:"status"`
 

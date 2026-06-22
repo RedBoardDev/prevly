@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -162,6 +163,60 @@ func (r *Reconciler) runContainer(ctx context.Context, ev *gh.PullRequestEvent, 
 	p.ContainerID = id
 	p.Port = hostPort
 	p.NetworkName = network
+	p.ContainerPort = app.Port
+	p.RunEnv = mergeEnv(app.Env, secs)
+	return nil
+}
+
+// mergeEnv combines non-secret env and resolved secrets into the single map used
+// to (re)start the container.
+func mergeEnv(env, secrets map[string]string) map[string]string {
+	if len(env) == 0 && len(secrets) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env)+len(secrets))
+	maps.Copy(out, env)
+	maps.Copy(out, secrets)
+	return out
+}
+
+// recreateFromImage runs a fresh container from the preview's existing image,
+// reusing the recorded network/port/env. It self-heals the case where the
+// stopped container was removed out from under prevly (e.g. an external
+// `docker prune`) — no rebuild. Fails if the image is also gone (needs redeploy).
+func (r *Reconciler) recreateFromImage(ctx context.Context, p *model.Preview) error {
+	if p.ImageTag == "" || p.ContainerPort == 0 {
+		return fmt.Errorf("preview %s lacks image/port metadata; needs redeploy", p.Host)
+	}
+	ok, err := r.runtime.ImageExists(ctx, p.ImageTag)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("image %s no longer present; needs redeploy", p.ImageTag)
+	}
+	if p.NetworkName != "" {
+		if err := r.runtime.EnsureNetwork(ctx, p.NetworkName); err != nil {
+			return err
+		}
+	}
+	name := model.ContainerName(p.Repo, p.PRNumber, p.AppName)
+	_ = r.runtime.Remove(ctx, name) // clear any stale same-name container first
+	id, hostPort, err := r.runtime.Run(ctx, runtime.RunSpec{
+		Name:          name,
+		Image:         p.ImageTag,
+		Network:       p.NetworkName,
+		ContainerPort: p.ContainerPort,
+		Secrets:       p.RunEnv,
+		Limits:        r.cfg.Limits.PerPreview,
+		ReadOnlyRoot:  r.cfg.Limits.PerPreview.ReadOnly,
+		Labels:        previewLabels(p.Repo, p.PRNumber, p.AppName),
+	})
+	if err != nil {
+		return err
+	}
+	p.ContainerID = id
+	p.Port = hostPort
 	return nil
 }
 

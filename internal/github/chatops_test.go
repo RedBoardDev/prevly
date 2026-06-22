@@ -20,9 +20,11 @@ func TestParseCommand(t *testing.T) {
 		{"destroy app", "/preview destroy audit", Command{Action: "destroy", App: "audit"}, true},
 		{"embedded in text", "please run\n/preview redeploy bo\nthanks", Command{Action: "redeploy", App: "bo"}, true},
 		{"leading spaces", "   /preview status  ", Command{Action: "status"}, true},
-		{"unknown action", "/preview frobnicate", Command{}, false},
+		{"wake app", "/preview wake registre", Command{Action: "wake", App: "registre"}, true},
+		{"unknown action shows help", "/preview frobnicate", Command{Action: "help"}, true},
+		{"bare slash shows help", "/preview", Command{Action: "help"}, true},
+		{"explicit help", "/preview help", Command{Action: "help"}, true},
 		{"not a command", "looks good to me", Command{}, false},
-		{"bare slash", "/preview", Command{}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -11,6 +11,8 @@ const (
 	ActionRedeploy = "redeploy"
 	ActionDestroy  = "destroy"
 	ActionStatus   = "status"
+	ActionWake     = "wake"
+	ActionHelp     = "help"
 )
 
 // Command is a parsed `/preview ...` ChatOps instruction.
@@ -25,14 +27,19 @@ type Command struct {
 func ParseCommand(body string) (Command, bool) {
 	for line := range strings.SplitSeq(body, "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) < 2 || fields[0] != "/preview" {
+		if len(fields) == 0 || fields[0] != "/preview" {
 			continue
+		}
+		// Bare "/preview" prints the available commands, like a not-found help.
+		if len(fields) == 1 {
+			return Command{Action: ActionHelp}, true
 		}
 		action := strings.ToLower(fields[1])
 		switch action {
-		case ActionRedeploy, ActionDestroy, ActionStatus:
+		case ActionRedeploy, ActionDestroy, ActionStatus, ActionWake, ActionHelp:
 		default:
-			continue
+			// Unknown subcommand: show help rather than silently ignoring.
+			return Command{Action: ActionHelp}, true
 		}
 		cmd := Command{Action: action}
 		if len(fields) >= 3 {
@@ -41,6 +48,18 @@ func ParseCommand(body string) (Command, bool) {
 		return cmd, true
 	}
 	return Command{}, false
+}
+
+// HelpText lists the available ChatOps commands. It is posted as a plain reply
+// (no sticky marker) so it never overwrites the status comment.
+func HelpText() string {
+	return "**prevly commands**\n\n" +
+		"| Command | Action |\n|---|---|\n" +
+		"| `/preview status` | Show this PR's previews and URLs |\n" +
+		"| `/preview redeploy [app]` | Rebuild and redeploy (all apps, or one) |\n" +
+		"| `/preview wake [app]` | Wake a sleeping preview (recreates it if needed) |\n" +
+		"| `/preview destroy [app]` | Tear down previews (all, or one) |\n" +
+		"| `/preview help` | Show this list |\n"
 }
 
 // Trusted author associations: members of the repo/org that may run ChatOps and

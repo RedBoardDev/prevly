@@ -39,6 +39,7 @@ type Runtime interface {
 	Stop(ctx context.Context, containerID string) error
 	Remove(ctx context.Context, containerID string) error
 	RemoveImage(ctx context.Context, image string) error
+	ImageExists(ctx context.Context, image string) (bool, error)
 	ListManaged(ctx context.Context) ([]Container, error)
 	PruneDangling(ctx context.Context) error
 }
@@ -126,6 +127,17 @@ func (d *DockerRuntime) RemoveImage(ctx context.Context, image string) error {
 		return err
 	}
 	return nil
+}
+
+// ImageExists reports whether a local image tag is present.
+func (d *DockerRuntime) ImageExists(ctx context.Context, image string) (bool, error) {
+	if _, _, err := d.r.run(ctx, "docker", "image", "inspect", image); err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // PruneDangling removes dangling images and reclaims build cache to keep host

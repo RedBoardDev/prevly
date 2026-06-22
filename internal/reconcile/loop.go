@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/model"
+	"github.com/RedBoardDev/prevly/internal/runtime"
 	"github.com/RedBoardDev/prevly/internal/store"
 )
 
@@ -34,6 +35,17 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		r.logger.Error("reconciler list", "err", err)
 		return
 	}
+
+	managed, err := r.runtime.ListManaged(ctx)
+	if err != nil {
+		r.logger.Warn("list managed containers", "err", err)
+		managed = nil
+	}
+	existing := make(map[string]bool, len(managed))
+	for _, c := range managed {
+		existing[c.Name] = true
+	}
+
 	for _, p := range previews {
 		if p.Status == model.StatusDestroyed {
 			continue
@@ -44,12 +56,48 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			}
 			continue
 		}
+		// Self-heal: the store says this preview is alive but its container is
+		// gone (e.g. an external `docker prune` removed it). Recreate it from the
+		// image so the store stays the source of truth.
+		if (p.Status == model.StatusRunning || p.Status == model.StatusSleeping) &&
+			!existing[model.ContainerName(p.Repo, p.PRNumber, p.AppName)] {
+			r.healMissing(ctx, p)
+			continue
+		}
 		if p.IdleSince(now) {
 			r.sleep(ctx, p)
 		}
 	}
-	r.reapOrphans(ctx)
+	r.reapOrphans(ctx, managed)
 	r.maybePrune(ctx)
+}
+
+// healMissing recreates a preview whose container vanished (e.g. an external
+// docker prune). Records lacking recreate metadata (created before this was
+// recorded) are left untouched for a redeploy to repopulate. If the image is
+// gone, the preview is marked failed so the PR shows it needs a redeploy.
+func (r *Reconciler) healMissing(ctx context.Context, p *model.Preview) {
+	if p.ImageTag == "" || p.ContainerPort == 0 {
+		r.logger.Warn("preview container missing; redeploy needed to recreate", "host", p.Host)
+		return
+	}
+	r.logger.Warn("preview container missing; recreating from image", "host", p.Host)
+	if err := r.recreateFromImage(ctx, p); err != nil {
+		r.logger.Error("heal recreate", "host", p.Host, "err", err)
+		p.Status = model.StatusFailed
+		p.FailureLog = "preview container was removed and could not be recreated: " + err.Error()
+		_ = r.store.Put(p)
+		r.publishPreview(ctx, p)
+		return
+	}
+	p.Status = model.StatusRunning
+	p.LastSeenAt = r.now()
+	if err := r.store.Put(p); err != nil {
+		r.logger.Error("heal persist", "host", p.Host, "err", err)
+		return
+	}
+	r.publishPreview(ctx, p)
+	r.logger.Info("preview recreated after container loss", "host", p.Host)
 }
 
 // maybePrune reclaims dangling images and build cache at most once per
@@ -80,12 +128,7 @@ func (r *Reconciler) sleep(ctx context.Context, p *model.Preview) {
 
 // reapOrphans removes managed containers that have no live preview record
 // (missed close events, stale state).
-func (r *Reconciler) reapOrphans(ctx context.Context) {
-	containers, err := r.runtime.ListManaged(ctx)
-	if err != nil {
-		r.logger.Warn("list managed containers", "err", err)
-		return
-	}
+func (r *Reconciler) reapOrphans(ctx context.Context, containers []runtime.Container) {
 	for _, c := range containers {
 		p, err := r.store.Get(c.Repo, c.PR, c.App)
 		orphan := errors.Is(err, store.ErrNotFound) || (p != nil && p.Status == model.StatusDestroyed)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/config"
@@ -53,10 +54,18 @@ func (r *Reconciler) touch(p *model.Preview) {
 }
 
 // wake starts a sleeping container, waits for readiness and marks it running.
+// If the container was removed out from under us (external prune), it recreates
+// it from the existing image — no rebuild.
 func (r *Reconciler) wake(ctx context.Context, p *model.Preview) error {
 	r.logger.Info("waking preview", "host", p.Host)
 	if err := r.runtime.Start(ctx, p.ContainerID); err != nil {
-		return fmt.Errorf("wake start: %w", err)
+		if !isContainerGone(err) {
+			return fmt.Errorf("wake start: %w", err)
+		}
+		r.logger.Warn("container missing on wake; recreating from image", "host", p.Host)
+		if rerr := r.recreateFromImage(ctx, p); rerr != nil {
+			return fmt.Errorf("wake recreate: %w", rerr)
+		}
 	}
 	// TCP accepts as soon as docker's port proxy binds — before the app listens —
 	// so probe HTTP: only route once the app actually responds, else the first
@@ -83,6 +92,12 @@ func (r *Reconciler) publishPreviewAsync(p *model.Preview) {
 
 func upstream(p *model.Preview) string {
 	return fmt.Sprintf("127.0.0.1:%d", p.Port)
+}
+
+// isContainerGone reports whether a docker error means the container no longer
+// exists (so it can be recreated rather than treated as a hard failure).
+func isContainerGone(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "no such container")
 }
 
 // awaitReady blocks until the freshly-started container accepts connections and,
