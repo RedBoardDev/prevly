@@ -3,6 +3,8 @@ package reconcile
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/model"
@@ -69,6 +71,7 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		}
 	}
 	r.reapOrphans(ctx, managed)
+	r.reapOrphanWorkDirs(previews, managed)
 	r.maybePrune(ctx)
 }
 
@@ -135,6 +138,40 @@ func (r *Reconciler) reapOrphans(ctx context.Context, containers []runtime.Conta
 		if orphan {
 			r.logger.Info("reaping orphan container", "name", c.Name)
 			_ = r.runtime.Remove(ctx, c.ID)
+		}
+	}
+}
+
+// reapOrphanWorkDirs removes checkout dirs under workDir that no live preview
+// record or managed container references. This reclaims disk for previews whose
+// record was already deleted (closed/torn-down PRs, de-onboarded repos) — the
+// case teardownPreview's own cleanup can no longer reach. A preview mid-build
+// already has a (non-destroyed) record, so it is never reaped from under a build.
+func (r *Reconciler) reapOrphanWorkDirs(previews []*model.Preview, managed []runtime.Container) {
+	keep := make(map[string]bool, len(previews)+len(managed))
+	for _, p := range previews {
+		if p.Status != model.StatusDestroyed {
+			keep[model.ContainerName(p.Repo, p.PRNumber, p.AppName)] = true
+		}
+	}
+	for _, c := range managed {
+		keep[c.Name] = true
+	}
+	entries, err := os.ReadDir(r.workDir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			r.logger.Warn("read work dir", "dir", r.workDir, "err", err)
+		}
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || keep[e.Name()] {
+			continue
+		}
+		dir := filepath.Join(r.workDir, e.Name())
+		r.logger.Info("reaping orphan work dir", "dir", dir)
+		if err := os.RemoveAll(dir); err != nil {
+			r.logger.Warn("remove orphan work dir", "dir", dir, "err", err)
 		}
 	}
 }
