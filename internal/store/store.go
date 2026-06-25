@@ -23,7 +23,8 @@ type Store struct {
 	db *bolt.DB
 }
 
-// Open opens (creating if needed) the bbolt database at path.
+// Open opens (creating if needed) the bbolt database at path. It takes the
+// exclusive file lock, so only one process (the daemon) may hold it at a time.
 func Open(path string) (*Store, error) {
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 5 * time.Second})
 	if err != nil {
@@ -36,6 +37,19 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("init store: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
+// OpenReadOnly opens the database with a shared lock for read-only access. It
+// is used by CLI commands as a fallback when the daemon is not running: the
+// daemon holds the exclusive lock while up, so this only succeeds when no
+// writer is active. Read methods (Get/List/...) work; writes are rejected by
+// bbolt. The bucket must already exist (the daemon creates it on first run).
+func OpenReadOnly(path string) (*Store, error) {
+	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 5 * time.Second, ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("open store: %w", err)
 	}
 	return &Store{db: db}, nil
 }
@@ -108,7 +122,13 @@ func (s *Store) ListByHost(host string) (*model.Preview, error) {
 func (s *Store) list(keep func(*model.Preview) bool) ([]*model.Preview, error) {
 	var out []*model.Preview
 	err := s.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(previewsBucket).ForEach(func(_, v []byte) error {
+		b := tx.Bucket(previewsBucket)
+		if b == nil {
+			// Bucket absent: a read-only open of a DB the daemon has never
+			// initialized. Treat as empty rather than panicking.
+			return nil
+		}
+		return b.ForEach(func(_, v []byte) error {
 			var p model.Preview
 			if err := json.Unmarshal(v, &p); err != nil {
 				return err

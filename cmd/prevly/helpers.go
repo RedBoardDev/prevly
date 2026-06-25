@@ -16,3 +16,9 @@ func storePath(cfg *config.HostConfig) string {
 func openStore(cfg *config.HostConfig) (*store.Store, error) {
 	return store.Open(storePath(cfg))
 }
+
+// openStoreReadOnly opens the state store with a shared lock. It is only safe
+// when the daemon is not running (the daemon holds the exclusive lock).
+func openStoreReadOnly(cfg *config.HostConfig) (*store.Store, error) {
+	return store.OpenReadOnly(storePath(cfg))
+}
