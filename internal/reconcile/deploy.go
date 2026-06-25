@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -240,6 +241,13 @@ func (r *Reconciler) teardownPreview(ctx context.Context, p *model.Preview) erro
 	}
 	if p.ImageTag != "" {
 		_ = r.runtime.RemoveImage(ctx, p.ImageTag)
+	}
+	// Reclaim the on-disk checkout (cloned source + build context, often GBs).
+	// Best-effort: a leaked work dir must never block teardown, but leaving it is
+	// exactly what fills the host disk over time.
+	workDir := filepath.Join(r.workDir, model.ContainerName(p.Repo, p.PRNumber, p.AppName))
+	if err := os.RemoveAll(workDir); err != nil {
+		r.logger.Warn("remove work dir", "dir", workDir, "err", err)
 	}
 	r.logger.Info("preview destroyed", "repo", p.Repo, "pr", p.PRNumber, "app", p.AppName)
 	return r.store.Delete(p.Repo, p.PRNumber, p.AppName)
