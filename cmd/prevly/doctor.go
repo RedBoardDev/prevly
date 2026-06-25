@@ -36,6 +36,17 @@ func newDoctorCmd(g *globalFlags) *cobra.Command {
 			check("host config", err)
 			if err == nil {
 				check("data dir writable", checkWritable(cfg.DataDir))
+				switch usage, derr := diskUsage(cfg.DataDir); {
+				case derr != nil:
+					check("data dir disk space", derr)
+				case usage.critical():
+					problems++
+					fmt.Fprintf(out, "[FAIL] data dir disk space: %s\n", usage)
+				case usage.low():
+					warn("data dir disk space", usage.String())
+				default:
+					fmt.Fprintf(out, "[ OK ] data dir disk space (%s)\n", usage)
+				}
 				switch creds, _, ok, lerr := setup.Load(cfg.DataDir); {
 				case lerr != nil:
 					check("github app credentials", lerr)
