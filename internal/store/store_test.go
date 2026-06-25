@@ -78,3 +78,37 @@ func TestListByPRAndHost(t *testing.T) {
 		t.Fatalf("expected ErrNotFound for unknown host, got %v", err)
 	}
 }
+
+func TestOpenReadOnly(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "state.db")
+
+	// Seed the DB with a writer, then release the exclusive lock.
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	p := &model.Preview{Repo: "org/repo", PRNumber: 7, AppName: "bo", Status: model.StatusRunning, Host: "pr-7-bo.x"}
+	if err := st.Put(p); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	// A read-only open (shared lock) must see the data — this backs the CLI
+	// fallback used when the daemon is down.
+	ro, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatalf("open read-only: %v", err)
+	}
+	defer ro.Close()
+
+	previews, err := ro.List()
+	if err != nil {
+		t.Fatalf("list read-only: %v", err)
+	}
+	if len(previews) != 1 || previews[0].Host != "pr-7-bo.x" {
+		t.Fatalf("unexpected read-only list: %+v", previews)
+	}
+}

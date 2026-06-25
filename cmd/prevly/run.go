@@ -20,6 +20,7 @@ import (
 	"github.com/RedBoardDev/prevly/internal/runtime"
 	"github.com/RedBoardDev/prevly/internal/secrets"
 	"github.com/RedBoardDev/prevly/internal/setup"
+	"github.com/RedBoardDev/prevly/internal/statusapi"
 	"github.com/RedBoardDev/prevly/internal/store"
 )
 
@@ -147,9 +148,12 @@ func runNormal(ctx context.Context, logger *applog.Logger, cfg *config.HostConfi
 
 	logger.Info("prevly daemon starting", "version", version, "base_domain", cfg.BaseDomain, "app_id", creds.AppID)
 
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 	go func() { errCh <- proxy.Run(ctx) }()
 	go func() { errCh <- rec.Run(ctx, reconcileInterval) }()
+	// Serve read-only state over a Unix socket so `prevly status` can query the
+	// daemon instead of opening the (exclusively locked) store.
+	go func() { errCh <- statusapi.Serve(ctx, cfg.DataDir, st, logger) }()
 
 	select {
 	case <-ctx.Done():
