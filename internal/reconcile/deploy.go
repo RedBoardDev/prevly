@@ -100,6 +100,11 @@ func (r *Reconciler) upsertBuilding(ev *gh.PullRequestEvent, repoCfg *config.Rep
 }
 
 func (r *Reconciler) buildImage(ctx context.Context, ev *gh.PullRequestEvent, app config.AppConfig, imageTag string) error {
+	buildSecrets, err := r.secrets.Resolve(app.BuildSecrets)
+	if err != nil {
+		return err
+	}
+
 	r.buildSem <- struct{}{}
 	defer func() { <-r.buildSem }()
 
@@ -123,6 +128,7 @@ func (r *Reconciler) buildImage(ctx context.Context, ev *gh.PullRequestEvent, ap
 		Dockerfile: app.Dockerfile,
 		ImageTag:   imageTag,
 		BuildArgs:  app.BuildArgs,
+		Secrets:    buildSecrets,
 	})
 	if err != nil {
 		// Surface the build output: the docker error alone is just "exit status

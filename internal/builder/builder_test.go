@@ -15,7 +15,7 @@ func TestBuildArgs(t *testing.T) {
 		ImageTag:   "prevly/org-repo/bo:pr-42-abc",
 		BuildArgs:  map[string]string{"NEXT_PUBLIC_API_URL": "https://api.example.com", "FOO": "bar"},
 	}
-	args := buildArgs(spec)
+	args, secretEnv := buildArgs(spec)
 	joined := strings.Join(args, " ")
 
 	for _, want := range []string{
@@ -35,13 +35,37 @@ func TestBuildArgs(t *testing.T) {
 	if args[len(args)-1] != "/work/checkout" {
 		t.Fatalf("context must be last arg, got %q", args[len(args)-1])
 	}
+	if len(secretEnv) != 0 {
+		t.Fatalf("no secrets in spec, expected no secret env: %v", secretEnv)
+	}
 }
 
 func TestBuildArgsAbsoluteDockerfile(t *testing.T) {
 	t.Parallel()
-	args := buildArgs(BuildSpec{ContextDir: "/ctx", Dockerfile: "/abs/Dockerfile", ImageTag: "t"})
+	args, _ := buildArgs(BuildSpec{ContextDir: "/ctx", Dockerfile: "/abs/Dockerfile", ImageTag: "t"})
 	if !strings.Contains(strings.Join(args, " "), "--file /abs/Dockerfile") {
 		t.Fatalf("absolute dockerfile should be used as-is: %v", args)
+	}
+}
+
+func TestBuildArgsSecretsNeverInArgv(t *testing.T) {
+	t.Parallel()
+	spec := BuildSpec{
+		ContextDir: "/ctx",
+		Dockerfile: "Dockerfile",
+		ImageTag:   "t",
+		Secrets:    map[string]string{"heroui_auth_token": "super-secret-value"},
+	}
+	args, secretEnv := buildArgs(spec)
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "super-secret-value") {
+		t.Fatalf("secret value leaked into argv: %v", args)
+	}
+	if !strings.Contains(joined, "--secret id=heroui_auth_token,env=PREVLY_BUILD_SECRET_0") {
+		t.Fatalf("missing --secret flag for heroui_auth_token: %v", args)
+	}
+	if !slices.Contains(secretEnv, "PREVLY_BUILD_SECRET_0=super-secret-value") {
+		t.Fatalf("secret value not carried via env: %v", secretEnv)
 	}
 }
 

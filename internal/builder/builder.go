@@ -21,6 +21,10 @@ type BuildSpec struct {
 	Dockerfile string            // path to the Dockerfile (relative to ContextDir or absolute)
 	ImageTag   string            // local tag to produce
 	BuildArgs  map[string]string // public, baked into the image
+	// Secrets maps a BuildKit secret id (must match the Dockerfile's
+	// `--mount=type=secret,id=...`) to its resolved value. Passed via
+	// `docker build --secret id=<name>,env=<VAR>`, never as a build arg or argv.
+	Secrets map[string]string
 }
 
 // BuildResult carries the produced tag and the build log (for PR feedback).
@@ -66,8 +70,8 @@ func New() *DockerBuilder {
 
 // Build runs `docker build` and returns the tag plus captured log.
 func (b *DockerBuilder) Build(ctx context.Context, spec BuildSpec) (BuildResult, error) {
-	args := buildArgs(spec)
-	out, err := b.r.run(ctx, b.buildEnv(), "docker", args...)
+	args, secretEnv := buildArgs(spec)
+	out, err := b.r.run(ctx, append(b.buildEnv(), secretEnv...), "docker", args...)
 	res := BuildResult{ImageTag: spec.ImageTag, Log: out}
 	if err != nil {
 		return res, fmt.Errorf("docker build: %w", err)
@@ -81,8 +85,12 @@ func (b *DockerBuilder) buildEnv() []string {
 	return append(os.Environ(), b.extraEnv...)
 }
 
-// buildArgs builds the `docker build` argument list. Pure for testability.
-func buildArgs(spec BuildSpec) []string {
+// buildArgs builds the `docker build` argument list, plus the env assignments
+// ("VAR=value") that must be appended to the process env so the `--secret
+// id=...,env=VAR` references it resolves to. Values never appear in argv, so
+// they never land in `docker inspect`/process-listing output. Pure for
+// testability.
+func buildArgs(spec BuildSpec) ([]string, []string) {
 	dockerfile := spec.Dockerfile
 	if !filepath.IsAbs(dockerfile) {
 		dockerfile = filepath.Join(spec.ContextDir, spec.Dockerfile)
@@ -97,8 +105,14 @@ func buildArgs(spec BuildSpec) []string {
 	for _, k := range sortedKeys(spec.BuildArgs) {
 		args = append(args, "--build-arg", k+"="+spec.BuildArgs[k])
 	}
+	var secretEnv []string
+	for i, name := range sortedKeys(spec.Secrets) {
+		envVar := fmt.Sprintf("PREVLY_BUILD_SECRET_%d", i)
+		args = append(args, "--secret", fmt.Sprintf("id=%s,env=%s", name, envVar))
+		secretEnv = append(secretEnv, envVar+"="+spec.Secrets[name])
+	}
 	args = append(args, spec.ContextDir)
-	return args
+	return args, secretEnv
 }
 
 func sortedKeys(m map[string]string) []string {
