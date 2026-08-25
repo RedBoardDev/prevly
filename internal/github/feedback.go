@@ -50,6 +50,14 @@ func RenderConfigError(err error) string {
 		"⚠️ Could not read `.prevly.yml`:\n\n```\n" + err.Error() + "\n```\n"
 }
 
+// RenderCapacityError renders a sticky comment reporting that the host is at
+// its preview limit, so the absence of a preview is not read as a bug.
+func RenderCapacityError(limit int) string {
+	return stickyMarker + "\n## prevly previews\n\n" +
+		fmt.Sprintf("⚠️ No preview slot left on the host (limit: %d concurrent previews).\n\n", limit) +
+		"Close or destroy a preview, then comment `/prevly redeploy` here.\n"
+}
+
 func statusBadge(s model.Status) string {
 	switch s {
 	case model.StatusRunning:

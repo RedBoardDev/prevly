@@ -102,3 +102,15 @@ func liveURL(p *model.Preview) string {
 	}
 	return ""
 }
+
+// surfaceCapacityError tells the PR that the host has no preview slot left,
+// instead of leaving the author with a silent absence of preview.
+func (r *Reconciler) surfaceCapacityError(ctx context.Context, ev *gh.PullRequestEvent) {
+	if ev.InstallationID == 0 {
+		return
+	}
+	body := gh.RenderCapacityError(r.cfg.Limits.MaxConcurrentPreviews)
+	if _, err := r.gh.UpsertComment(ctx, ev.InstallationID, ev.Owner, ev.Name, ev.Number, body); err != nil {
+		r.logger.Warn("surface capacity comment", "repo", ev.Repo, "pr", ev.Number, "err", err)
+	}
+}

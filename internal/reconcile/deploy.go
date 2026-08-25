@@ -40,27 +40,33 @@ func (r *Reconciler) deployApp(ctx context.Context, ev *gh.PullRequestEvent, rep
 
 	imageTag := model.ImageTag(ev.Repo, app.Name, ev.Number, ev.HeadSHA)
 	if err := r.buildImage(ctx, ev, app, imageTag); err != nil {
-		p.Status = model.StatusFailed
-		p.FailureLog = lastLines(err.Error(), 30)
-		_ = r.store.Put(p)
-		r.publish(ctx, ev, p)
+		r.recordFailure(ctx, ev, p, err)
 		return err
 	}
 
+	// The build waited on buildSem, possibly for a long time: the PR may have
+	// been merged meanwhile, and its teardown already ran.
+	if r.abandoned(ev.Repo, ev.Number, app.Name) {
+		_ = r.runtime.RemoveImage(ctx, imageTag)
+		r.logger.Info("preview abandoned during build; image discarded",
+			"repo", ev.Repo, "pr", ev.Number, "app", app.Name)
+		return nil
+	}
+
 	if err := r.runContainer(ctx, ev, app, p, imageTag); err != nil {
-		p.Status = model.StatusFailed
-		p.FailureLog = lastLines(err.Error(), 30)
-		_ = r.store.Put(p)
-		r.publish(ctx, ev, p)
+		r.recordFailure(ctx, ev, p, err)
 		return err
 	}
 
 	if err := r.awaitReady(ctx, p, app); err != nil {
-		p.Status = model.StatusFailed
-		p.FailureLog = lastLines(err.Error(), 30)
-		_ = r.store.Put(p)
-		r.publish(ctx, ev, p)
+		r.recordFailure(ctx, ev, p, err)
 		return err
+	}
+
+	if r.abandoned(ev.Repo, ev.Number, app.Name) {
+		p.ImageTag = imageTag
+		_ = r.teardownPreview(ctx, p)
+		return nil
 	}
 
 	p.Status = model.StatusRunning
@@ -281,6 +287,33 @@ func (r *Reconciler) teardownPR(ctx context.Context, repo string, pr int, app st
 		n++
 	}
 	return n, nil
+}
+
+// abandoned reports whether this preview must not be written back: its PR is
+// closed, or its record was deleted while a long step ran (`closed` webhook,
+// `/prevly destroy`). Putting the record back here would resurrect a preview no
+// teardown will ever come for again - it would hold a capacity slot until its
+// TTL, weeks later, and that is what fills the host.
+func (r *Reconciler) abandoned(repo string, pr int, app string) bool {
+	if r.isClosed(repo, pr) {
+		return true
+	}
+	existing, err := r.store.Get(repo, pr, app)
+	return err == nil && existing == nil
+}
+
+// recordFailure stores a build/run failure, unless the preview was abandoned
+// meanwhile - a failed record is a live record for capacity purposes.
+func (r *Reconciler) recordFailure(ctx context.Context, ev *gh.PullRequestEvent, p *model.Preview, cause error) {
+	if r.abandoned(ev.Repo, ev.Number, p.AppName) {
+		r.logger.Info("preview abandoned during build; failure discarded",
+			"repo", ev.Repo, "pr", ev.Number, "app", p.AppName)
+		return
+	}
+	p.Status = model.StatusFailed
+	p.FailureLog = lastLines(cause.Error(), 30)
+	_ = r.store.Put(p)
+	r.publish(ctx, ev, p)
 }
 
 func (r *Reconciler) checkCapacity() error {

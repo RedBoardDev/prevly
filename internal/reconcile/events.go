@@ -14,6 +14,9 @@ import (
 func (r *Reconciler) HandlePullRequest(ctx context.Context, ev *gh.PullRequestEvent) error {
 	switch ev.Action {
 	case "closed":
+		// Marked before the teardown, never after: a build queued behind
+		// buildSem must already see the PR as closed when it lands.
+		r.markClosed(ev.Repo, ev.Number)
 		n, err := r.teardownPR(ctx, ev.Repo, ev.Number, "")
 		if err != nil {
 			return err
@@ -21,6 +24,7 @@ func (r *Reconciler) HandlePullRequest(ctx context.Context, ev *gh.PullRequestEv
 		r.logger.Info("PR closed; previews destroyed", "repo", ev.Repo, "pr", ev.Number, "count", n)
 		return nil
 	case "opened", "synchronize", "reopened", "ready_for_review":
+		r.markOpen(ev.Repo, ev.Number)
 		return r.deployFromEvent(ctx, ev)
 	default:
 		return nil
@@ -58,9 +62,16 @@ func (r *Reconciler) deployFromEvent(ctx context.Context, ev *gh.PullRequestEven
 
 func (r *Reconciler) deployApps(ctx context.Context, ev *gh.PullRequestEvent, repoCfg *config.RepoConfig, apps []config.AppConfig) {
 	for _, app := range apps {
-		if err := r.deployApp(ctx, ev, repoCfg, app); err != nil {
-			r.logger.Error("deploy app", "repo", ev.Repo, "pr", ev.Number, "app", app.Name, "err", err)
+		err := r.deployApp(ctx, ev, repoCfg, app)
+		if err == nil {
+			continue
 		}
+		// A refused deploy used to be logged host-side only: the PR showed
+		// nothing at all, and the author had no way to know why no preview came.
+		if errors.Is(err, errCapacity) {
+			r.surfaceCapacityError(ctx, ev)
+		}
+		r.logger.Error("deploy app", "repo", ev.Repo, "pr", ev.Number, "app", app.Name, "err", err)
 	}
 }
 
