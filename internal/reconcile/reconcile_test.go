@@ -547,3 +547,108 @@ func TestChatOpsRedeployUntrustedDenied(t *testing.T) {
 		t.Fatal("untrusted redeploy must do nothing")
 	}
 }
+
+// hookBuilder runs onBuild while the build holds the build semaphore, which is
+// where a `closed` webhook lands in the leak these tests cover.
+type hookBuilder struct {
+	onBuild  func()
+	buildErr error
+}
+
+func (b *hookBuilder) Checkout(context.Context, builder.CheckoutOptions) error { return nil }
+
+func (b *hookBuilder) Build(_ context.Context, spec builder.BuildSpec) (builder.BuildResult, error) {
+	if b.onBuild != nil {
+		b.onBuild()
+	}
+	return builder.BuildResult{ImageTag: spec.ImageTag, Log: "log"}, b.buildErr
+}
+
+// A PR merged while its build is queued must not come back: the `closed`
+// webhook has already fired, so a record written after it would never be torn
+// down again and would hold a capacity slot until its TTL.
+func TestPRClosedDuringBuildLeavesNoPreview(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	frt := &fakeRuntime{runID: "cid", runPort: listenPort(t)}
+	var rec *Reconciler
+	bld := &hookBuilder{onBuild: func() {
+		closed := openedEvent()
+		closed.Action = "closed"
+		_ = rec.HandlePullRequest(context.Background(), closed)
+	}}
+	rec, st := newTestReconciler(t, fg, frt, bld)
+
+	if err := rec.HandlePullRequest(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if previews, _ := st.ListByPR("org/repo", 42); len(previews) != 0 {
+		t.Fatalf("closed PR must leave no preview, got %d", len(previews))
+	}
+	if len(frt.imgRm) == 0 {
+		t.Fatal("the image built for a closed PR must be discarded")
+	}
+}
+
+func TestBuildFailureAfterCloseLeavesNoPreview(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	var rec *Reconciler
+	bld := &hookBuilder{buildErr: context.DeadlineExceeded, onBuild: func() {
+		closed := openedEvent()
+		closed.Action = "closed"
+		_ = rec.HandlePullRequest(context.Background(), closed)
+	}}
+	rec, st := newTestReconciler(t, fg, &fakeRuntime{}, bld)
+
+	_ = rec.HandlePullRequest(context.Background(), openedEvent())
+
+	if previews, _ := st.ListByPR("org/repo", 42); len(previews) != 0 {
+		t.Fatalf("a failure after close must leave no record, got %d", len(previews))
+	}
+}
+
+func TestReopenedPRDeploysAgain(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	frt := &fakeRuntime{runID: "cid", runPort: listenPort(t)}
+	rec, st := newTestReconciler(t, fg, frt, &fakeBuilder{})
+
+	closed := openedEvent()
+	closed.Action = "closed"
+	_ = rec.HandlePullRequest(context.Background(), closed)
+
+	reopened := openedEvent()
+	reopened.Action = "reopened"
+	if err := rec.HandlePullRequest(context.Background(), reopened); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+
+	p, err := st.Get("org/repo", 42, "web")
+	if err != nil || p == nil {
+		t.Fatalf("reopened PR must deploy again: %v", err)
+	}
+	if p.Status != model.StatusRunning {
+		t.Fatalf("status = %q, want running", p.Status)
+	}
+}
+
+func TestCapacityRefusalSurfacedInPR(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	rec, st := newTestReconciler(t, fg, &fakeRuntime{runID: "cid", runPort: 3}, &fakeBuilder{})
+	_ = st.Put(&model.Preview{Repo: "org/a", PRNumber: 1, AppName: "x", Status: model.StatusRunning, Host: "a"})
+	_ = st.Put(&model.Preview{Repo: "org/b", PRNumber: 1, AppName: "y", Status: model.StatusRunning, Host: "b"})
+
+	if err := rec.HandlePullRequest(context.Background(), openedEvent()); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fg.comments != 1 {
+		t.Fatalf("a refused deploy must tell the PR, got %d comments", fg.comments)
+	}
+	if previews, _ := st.ListByPR("org/repo", 42); len(previews) != 0 {
+		t.Fatalf("a refused deploy must create no preview, got %d", len(previews))
+	}
+}

@@ -6,6 +6,7 @@
 package reconcile
 
 import (
+	"sync"
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/builder"
@@ -49,7 +50,22 @@ type Reconciler struct {
 
 	// now is injectable for deterministic tests.
 	now func() time.Time
+
+	// closedPRs remembers the PRs whose `closed` webhook already landed, so a
+	// build still queued behind buildSem does not deploy a preview nothing will
+	// ever tear down again. Entries expire after closedMemory.
+	closedMu  sync.Mutex
+	closedPRs map[prKey]time.Time
 }
+
+type prKey struct {
+	repo string
+	pr   int
+}
+
+// closedMemory bounds how long a closed PR is remembered - long enough to
+// outlive any build queued behind the semaphore.
+const closedMemory = 12 * time.Hour
 
 // New builds a Reconciler.
 func New(d Deps) *Reconciler {
@@ -72,6 +88,7 @@ func New(d Deps) *Reconciler {
 		pruneEvery:   24 * time.Hour,
 		lastPruneAt:  time.Now(),
 		now:          time.Now,
+		closedPRs:    map[prKey]time.Time{},
 	}
 }
 
@@ -90,4 +107,31 @@ func (r *Reconciler) idleFor(repoCfg *config.RepoConfig) time.Duration {
 		return repoCfg.Idle.Std()
 	}
 	return r.cfg.Defaults.Idle.Std()
+}
+
+// markClosed records a PR as closed and forgets stale entries.
+func (r *Reconciler) markClosed(repo string, pr int) {
+	r.closedMu.Lock()
+	defer r.closedMu.Unlock()
+	cutoff := r.now().Add(-closedMemory)
+	for k, at := range r.closedPRs {
+		if at.Before(cutoff) {
+			delete(r.closedPRs, k)
+		}
+	}
+	r.closedPRs[prKey{repo: repo, pr: pr}] = r.now()
+}
+
+// markOpen forgets a PR that was closed and is open again.
+func (r *Reconciler) markOpen(repo string, pr int) {
+	r.closedMu.Lock()
+	defer r.closedMu.Unlock()
+	delete(r.closedPRs, prKey{repo: repo, pr: pr})
+}
+
+func (r *Reconciler) isClosed(repo string, pr int) bool {
+	r.closedMu.Lock()
+	defer r.closedMu.Unlock()
+	at, ok := r.closedPRs[prKey{repo: repo, pr: pr}]
+	return ok && at.After(r.now().Add(-closedMemory))
 }
