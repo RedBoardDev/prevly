@@ -17,10 +17,14 @@ func (r *Reconciler) HandlePullRequest(ctx context.Context, ev *gh.PullRequestEv
 		// Marked before the teardown, never after: a build queued behind
 		// buildSem must already see the PR as closed when it lands.
 		r.markClosed(ev.Repo, ev.Number)
+		// Snapshot before the teardown: it deletes the store records these
+		// names are derived from.
+		envs := r.previewEnvironments(ev.Repo, ev.Number)
 		n, err := r.teardownPR(ctx, ev.Repo, ev.Number, "")
 		if err != nil {
 			return err
 		}
+		r.deleteEnvironments(ctx, ev, envs)
 		r.logger.Info("PR closed; previews destroyed", "repo", ev.Repo, "pr", ev.Number, "count", n)
 		return nil
 	case "opened", "synchronize", "reopened", "ready_for_review":

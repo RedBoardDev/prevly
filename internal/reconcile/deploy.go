@@ -261,8 +261,25 @@ func (r *Reconciler) teardownPreview(ctx context.Context, p *model.Preview) erro
 	if err := os.RemoveAll(workDir); err != nil {
 		r.logger.Warn("remove work dir", "dir", workDir, "err", err)
 	}
+	// Before store.Delete: it drops DeploymentID, and a deployment nothing can
+	// address again stays green on the PR forever.
+	r.deactivateDeployment(ctx, p)
 	r.logger.Info("preview destroyed", "repo", p.Repo, "pr", p.PRNumber, "app", p.AppName)
 	return r.store.Delete(p.Repo, p.PRNumber, p.AppName)
+}
+
+// deactivateDeployment flips a torn-down preview's Deployment to `inactive`.
+func (r *Reconciler) deactivateDeployment(ctx context.Context, p *model.Preview) {
+	if p.InstallationID == 0 || p.DeploymentID == 0 {
+		return
+	}
+	owner, name, ok := strings.Cut(p.Repo, "/")
+	if !ok {
+		return
+	}
+	if err := r.gh.SetDeploymentStatus(ctx, p.InstallationID, owner, name, p.DeploymentID, model.StatusDestroyed, ""); err != nil {
+		r.logger.Warn("deactivate deployment", "repo", p.Repo, "pr", p.PRNumber, "app", p.AppName, "err", err)
+	}
 }
 
 // Teardown destroys a PR's previews (or one app). Exposed for the admin CLI.

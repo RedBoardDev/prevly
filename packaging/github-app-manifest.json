@@ -12,6 +12,7 @@
     "contents": "read",
     "pull_requests": "write",
     "deployments": "write",
+    "administration": "write",
     "issues": "write",
     "checks": "write",
     "metadata": "read"

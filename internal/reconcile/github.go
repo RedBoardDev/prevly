@@ -24,6 +24,7 @@ type GitHub interface {
 	Reply(ctx context.Context, installationID int64, owner, repo string, pr int, body string) error
 	CreateDeployment(ctx context.Context, installationID int64, owner, repo, ref, environment string) (int64, error)
 	SetDeploymentStatus(ctx context.Context, installationID int64, owner, repo string, deploymentID int64, status model.Status, url string) error
+	DeleteEnvironment(ctx context.Context, installationID int64, owner, repo, environment string) error
 }
 
 // appGitHub adapts a *github.App to the GitHub interface using installation-
@@ -72,4 +73,8 @@ func (a *appGitHub) CreateDeployment(ctx context.Context, installationID int64, 
 
 func (a *appGitHub) SetDeploymentStatus(ctx context.Context, installationID int64, owner, repo string, deploymentID int64, status model.Status, url string) error {
 	return gh.NewFeedback(a.app.Client(installationID)).SetDeploymentStatus(ctx, owner, repo, deploymentID, status, url)
+}
+
+func (a *appGitHub) DeleteEnvironment(ctx context.Context, installationID int64, owner, repo, environment string) error {
+	return gh.NewFeedback(a.app.Client(installationID)).DeleteEnvironment(ctx, owner, repo, environment)
 }

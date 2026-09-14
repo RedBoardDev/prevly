@@ -97,6 +97,7 @@ type Feedback interface {
 	UpsertComment(ctx context.Context, owner, repo string, pr int, body string) (int64, error)
 	CreateDeployment(ctx context.Context, owner, repo, ref, environment string) (int64, error)
 	SetDeploymentStatus(ctx context.Context, owner, repo string, deploymentID int64, status model.Status, environmentURL string) error
+	DeleteEnvironment(ctx context.Context, owner, repo, environment string) error
 }
 
 // APIFeedback implements Feedback against the GitHub API.
@@ -175,6 +176,17 @@ func (f *APIFeedback) SetDeploymentStatus(ctx context.Context, owner, repo strin
 	_, _, err := f.client.Repositories.CreateDeploymentStatus(ctx, owner, repo, deploymentID, req)
 	if err != nil {
 		return fmt.Errorf("set deployment status: %w", err)
+	}
+	return nil
+}
+
+// DeleteEnvironment removes a Deployment environment and every deployment
+// filed under it. Requires the App's `administration: write` permission;
+// `deployments: write` alone answers 403.
+func (f *APIFeedback) DeleteEnvironment(ctx context.Context, owner, repo, environment string) error {
+	_, err := f.client.Repositories.DeleteEnvironment(ctx, owner, repo, environment)
+	if err != nil {
+		return fmt.Errorf("delete environment: %w", err)
 	}
 	return nil
 }
