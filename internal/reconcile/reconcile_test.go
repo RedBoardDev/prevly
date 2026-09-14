@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -100,6 +101,7 @@ type fakeGitHub struct {
 	replies     int
 	deployments int
 	statuses    []model.Status
+	deletedEnvs []string
 }
 
 func (f *fakeGitHub) ChangedFiles(context.Context, int64, string, string, int) ([]string, error) {
@@ -126,6 +128,10 @@ func (f *fakeGitHub) CreateDeployment(context.Context, int64, string, string, st
 }
 func (f *fakeGitHub) SetDeploymentStatus(_ context.Context, _ int64, _, _ string, _ int64, status model.Status, _ string) error {
 	f.statuses = append(f.statuses, status)
+	return nil
+}
+func (f *fakeGitHub) DeleteEnvironment(_ context.Context, _ int64, _, _ string, environment string) error {
+	f.deletedEnvs = append(f.deletedEnvs, environment)
 	return nil
 }
 
@@ -323,6 +329,29 @@ func TestPRClosedTeardown(t *testing.T) {
 	}
 	if len(frt.removed) == 0 {
 		t.Fatal("container should have been removed")
+	}
+	if want := []string{"preview/pr-42-web"}; !slices.Equal(fg.deletedEnvs, want) {
+		t.Fatalf("deleted environments = %v, want %v", fg.deletedEnvs, want)
+	}
+	if last := fg.statuses[len(fg.statuses)-1]; last != model.StatusDestroyed {
+		t.Fatalf("last deployment status = %q, want destroyed", last)
+	}
+}
+
+// A PR torn down by TTL or chatops can still be redeployed, so its environment
+// must survive; only the `closed` webhook reclaims it.
+func TestChatopsDestroyKeepsEnvironment(t *testing.T) {
+	t.Parallel()
+	fg := &fakeGitHub{changed: []string{"x"}, repoCfg: singleAppCfg()}
+	frt := &fakeRuntime{runID: "cid", runPort: listenPort(t)}
+	rec, _ := newTestReconciler(t, fg, frt, &fakeBuilder{})
+	_ = rec.HandlePullRequest(context.Background(), openedEvent())
+
+	if _, err := rec.teardownPR(context.Background(), "org/repo", 42, ""); err != nil {
+		t.Fatalf("teardown: %v", err)
+	}
+	if len(fg.deletedEnvs) != 0 {
+		t.Fatalf("deleted environments = %v, want none", fg.deletedEnvs)
 	}
 }
 

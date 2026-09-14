@@ -57,6 +57,13 @@ right permissions and webhook, and its credentials are persisted under
 (`prevly init` scaffolds one; see [`examples/.prevly.yml`](./examples/.prevly.yml)).
 No localhost dance, no copying secrets around.
 
+> **Upgrading an App created before this change:** prevly now asks for
+> `administration: write`, which is what GitHub requires to delete a Deployment
+> environment. GitHub does not grant a new permission silently - an org owner
+> must accept it from the App's settings page. Until they do, teardown still
+> marks deployments inactive but every `preview/pr-<N>-<app>` environment
+> survives its PR, and the repo's environment list grows without bound.
+
 ## CLI
 
 ```

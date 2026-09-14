@@ -114,3 +114,34 @@ func (r *Reconciler) surfaceCapacityError(ctx context.Context, ev *gh.PullReques
 		r.logger.Warn("surface capacity comment", "repo", ev.Repo, "pr", ev.Number, "err", err)
 	}
 }
+
+// previewEnvironments snapshots the Deployment environment names of a PR's
+// previews. Call it before the teardown: teardownPreview deletes the store
+// records these names are derived from.
+func (r *Reconciler) previewEnvironments(repo string, pr int) []string {
+	previews, err := r.store.ListByPR(repo, pr)
+	if err != nil {
+		r.logger.Warn("list previews for environment cleanup", "repo", repo, "pr", pr, "err", err)
+		return nil
+	}
+	envs := make([]string, 0, len(previews))
+	for _, p := range previews {
+		envs = append(envs, deploymentEnv(p))
+	}
+	return envs
+}
+
+// deleteEnvironments reclaims the per-PR Deployment environments GitHub creates
+// on the first deploy. Nothing else ever removes them: a transient environment
+// outlives its deployments, so without this a repo accumulates one environment
+// per app per PR for its whole life.
+func (r *Reconciler) deleteEnvironments(ctx context.Context, ev *gh.PullRequestEvent, envs []string) {
+	if ev.InstallationID == 0 {
+		return
+	}
+	for _, env := range envs {
+		if err := r.gh.DeleteEnvironment(ctx, ev.InstallationID, ev.Owner, ev.Name, env); err != nil {
+			r.logger.Warn("delete deployment environment", "repo", ev.Repo, "pr", ev.Number, "env", env, "err", err)
+		}
+	}
+}

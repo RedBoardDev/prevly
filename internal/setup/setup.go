@@ -109,9 +109,13 @@ func appManifest(name, baseDomain, redirectURL string) manifest {
 			"contents":      "read",
 			"pull_requests": "write", // comment on PRs (issues-comments on a PR checks this perm)
 			"deployments":   "write",
-			"issues":        "write",
-			"checks":        "write",
-			"metadata":      "read",
+			// Drop this and teardown can no longer delete a closed PR's
+			// Deployment environments: GitHub answers 403 and the repo
+			// accumulates one environment per app per PR, forever.
+			"administration": "write",
+			"issues":         "write",
+			"checks":         "write",
+			"metadata":       "read",
 		},
 		DefaultEvents: []string{"pull_request", "issue_comment"},
 	}
