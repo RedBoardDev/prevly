@@ -12,6 +12,9 @@ import (
 const (
 	TLSModeDNS01    = "dns-01"
 	TLSModeOnDemand = "on-demand"
+	// TLSModeExternal serves cleartext behind a terminating proxy: no ACME, no
+	// HTTPS listener, no redirect to https.
+	TLSModeExternal = "external"
 )
 
 // HostConfig is the daemon-side configuration (never committed to a repo).
@@ -33,7 +36,7 @@ type HostConfig struct {
 
 // TLSConfig configures ACME / CertMagic.
 type TLSConfig struct {
-	Mode     string `yaml:"mode"`     // dns-01 | on-demand
+	Mode     string `yaml:"mode"`     // dns-01 | on-demand | external
 	Provider string `yaml:"provider"` // route53 | cloudflare
 	Email    string `yaml:"email"`    // ACME account email
 }
@@ -141,10 +144,12 @@ func (c *HostConfig) Validate() error {
 			return fmt.Errorf("tls.provider %q unsupported (route53|cloudflare)", c.TLS.Provider)
 		}
 	case TLSModeOnDemand:
+	case TLSModeExternal:
 	default:
-		return fmt.Errorf("tls.mode %q unsupported (dns-01|on-demand)", c.TLS.Mode)
+		return fmt.Errorf("tls.mode %q unsupported (dns-01|on-demand|external)", c.TLS.Mode)
 	}
-	if c.TLS.Email == "" {
+	// external mode never talks to ACME, so it has no account to register.
+	if c.TLS.Mode != TLSModeExternal && c.TLS.Email == "" {
 		return fmt.Errorf("tls.email (ACME account email) is required")
 	}
 	// The GitHub App is optional in config: when app_id is unset the daemon

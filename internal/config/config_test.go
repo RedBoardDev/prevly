@@ -173,6 +173,20 @@ func TestParseHostConfigSetupModeValid(t *testing.T) {
 	}
 }
 
+// external mode sits behind a terminating proxy, so it registers no ACME
+// account and must not demand an email.
+func TestParseHostConfigExternalTLSNeedsNoEmail(t *testing.T) {
+	t.Parallel()
+	yaml := "base_domain: x.com\ntls: {mode: external}\ndata_dir: /var/lib/prevly\nhttp_addr: 127.0.0.1:8090\n"
+	cfg, err := ParseHostConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("external tls mode should be valid without an email: %v", err)
+	}
+	if cfg.HTTPAddr != "127.0.0.1:8090" {
+		t.Fatalf("http_addr = %q", cfg.HTTPAddr)
+	}
+}
+
 func TestHostConfigValidationErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -183,6 +197,7 @@ func TestHostConfigValidationErrors(t *testing.T) {
 		{"no base_domain", "tls:\n  mode: on-demand\n  email: a@b.c\ngithub:\n  app_id: 1\n  private_key_path: k\n  webhook_secret_env: W\n", "base_domain is required"},
 		{"wildcard base_domain", "base_domain: \"*.x.com\"\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "bare domain"},
 		{"bad tls mode", "base_domain: x.com\ntls: {mode: bogus, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.mode"},
+		{"on-demand still needs email", "base_domain: x.com\ntls: {mode: on-demand}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.email"},
 		{"dns01 needs provider", "base_domain: x.com\ntls: {mode: dns-01, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.provider is required"},
 		{"app_id without key", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, webhook_secret_env: W}\n", "private_key_path is required"},
 		{"app_id without webhook env", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k}\n", "webhook_secret_env is required"},
