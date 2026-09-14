@@ -79,7 +79,9 @@ prevly version   version info
 ## Core principles
 
 - **Single Go binary.** The daemon is also the reverse proxy and the ACME
-  client (via CertMagic). Nothing else to install.
+  client (via CertMagic). Nothing else to install. Already running a
+  terminating proxy? `tls.mode: external` serves cleartext on `http_addr` and
+  leaves certificates to it.
 - **Frontend previews against an existing backend** (not full ephemeral envs).
 - **Secure by default.** Hardened containers, isolated networks, no prod secrets,
   fork-PR gating. (Rootless Docker recommended.)

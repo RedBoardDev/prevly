@@ -100,6 +100,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Run configures CertMagic and serves HTTP (ACME + redirect) and HTTPS until
 // ctx is cancelled.
 func (p *Proxy) Run(ctx context.Context) error {
+	if p.tls.Mode == config.TLSModeExternal {
+		return p.runCleartext(ctx)
+	}
 	magic, issuer, err := p.certmagic(ctx)
 	if err != nil {
 		return err
@@ -150,6 +153,31 @@ func (p *Proxy) Run(ctx context.Context) error {
 	case err := <-errCh:
 		shutdown(httpSrv)
 		shutdown(httpsSrv)
+		return err
+	}
+}
+
+// runCleartext serves the proxy itself over plain HTTP on httpAddr, for a
+// terminating proxy in front (Caddy, nginx, an ALB) that preserves the Host
+// header. It must not install redirectToHTTPS: the front end forwards over
+// HTTP, so a redirect to https sends the request back through it, forever.
+func (p *Proxy) runCleartext(ctx context.Context) error {
+	srv := &http.Server{
+		Addr:              p.httpAddr,
+		Handler:           p,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	errCh := make(chan error, 1)
+	go func() { errCh <- serveHTTP(srv) }()
+
+	p.logger.Info("ingress listening", "http", p.httpAddr, "tls", p.tls.Mode)
+
+	select {
+	case <-ctx.Done():
+		shutdown(srv)
+		return nil
+	case err := <-errCh:
+		shutdown(srv)
 		return err
 	}
 }

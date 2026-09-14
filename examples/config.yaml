@@ -4,9 +4,16 @@
 base_domain: preview.staging.kare-app.fr   # previews at pr-<N>[-<app>].<base_domain>
 
 tls:
-  mode: dns-01                     # dns-01 | on-demand
-  provider: route53                # route53 | cloudflare
-  email: ops@example.com           # ACME account email
+  mode: dns-01                     # dns-01 | on-demand | external
+  provider: route53                # route53 | cloudflare (dns-01 only)
+  email: ops@example.com           # ACME account email (not used by external)
+
+# Behind a terminating proxy (Caddy, nginx, an ALB) instead: prevly serves
+# cleartext on http_addr and issues no certificate. The front end must pass the
+# original Host header through — prevly routes previews on it.
+# tls:
+#   mode: external
+# http_addr: 127.0.0.1:8090
 
 # GitHub App — OPTIONAL. Leave this out to create the App through the in-daemon
 # setup flow: start the daemon, then open https://<base_domain>/setup (the URL
