@@ -104,7 +104,7 @@ func livePreview() *model.Preview {
 		Repo: "org/repo", PRNumber: 42, AppName: "web",
 		Host: previewHost, URL: "https://" + previewHost,
 		Status: model.StatusRunning, InstallationID: 7, CommitSHA: "abc1234def",
-		FeedbackEnabled: true,
+		FeedbackEnabled: boolPtr(true),
 	}
 }
 
@@ -335,7 +335,7 @@ func TestCreateWrongContentType(t *testing.T) {
 func TestUnknownHostAndOptedOutRepo(t *testing.T) {
 	t.Parallel()
 	optedOut := livePreview()
-	optedOut.FeedbackEnabled = false
+	optedOut.FeedbackEnabled = boolPtr(false)
 	f := newFixture(t, defaultConfig(), optedOut)
 	h := f.svc.PreviewHandler()
 
@@ -476,3 +476,5 @@ func TestControlHandlerHasNoAPI(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }

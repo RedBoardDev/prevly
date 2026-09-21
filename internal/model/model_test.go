@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -101,5 +102,21 @@ func TestKey(t *testing.T) {
 	p := &Preview{Repo: "org/repo", PRNumber: 42, AppName: "bo"}
 	if got := p.Key(); got != "org/repo#42#bo" {
 		t.Fatalf("Key() = %q", got)
+	}
+}
+
+func TestFeedbackOnDefaultsToOnWhenUnset(t *testing.T) {
+	t.Parallel()
+	var decoded Preview
+	if err := json.Unmarshal([]byte(`{"repo":"o/r","pr_number":1,"app_name":"web"}`), &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !decoded.FeedbackOn() {
+		t.Fatal("a preview stored before the field existed must serve feedback")
+	}
+	off := false
+	decoded.FeedbackEnabled = &off
+	if decoded.FeedbackOn() {
+		t.Fatal("explicit opt-out must be honoured")
 	}
 }

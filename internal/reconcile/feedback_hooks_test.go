@@ -84,7 +84,7 @@ func TestFeedbackURL(t *testing.T) {
 
 	live := &model.Preview{
 		Status: model.StatusRunning, URL: "https://pr-42-web.preview.example.com",
-		FeedbackEnabled: true,
+		FeedbackEnabled: boolPtr(true),
 	}
 	if got := rec.feedbackURL(live); got != "https://pr-42-web.preview.example.com/?prevly_feedback=1" {
 		t.Fatalf("feedbackURL = %q", got)
@@ -97,7 +97,7 @@ func TestFeedbackURL(t *testing.T) {
 	}
 
 	optedOut := *live
-	optedOut.FeedbackEnabled = false
+	optedOut.FeedbackEnabled = boolPtr(false)
 	if got := rec.feedbackURL(&optedOut); got != "" {
 		t.Fatalf("opted-out repo: feedbackURL = %q", got)
 	}
@@ -123,12 +123,14 @@ func TestDeploySnapshotsRepoOptIn(t *testing.T) {
 	rec, _ := newHookedReconciler(t, &Deps{})
 
 	p := rec.upsertBuilding(openedEvent(), cfg, cfg.Apps[0], "h", "https://h", nil)
-	if p.FeedbackEnabled {
+	if p.FeedbackOn() {
 		t.Fatal("repo opt-out must be recorded on the preview")
 	}
 
 	p = rec.upsertBuilding(openedEvent(), singleAppCfg(), cfg.Apps[0], "h", "https://h", nil)
-	if !p.FeedbackEnabled {
+	if !p.FeedbackOn() {
 		t.Fatal("default repo config must record the opt-in")
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
