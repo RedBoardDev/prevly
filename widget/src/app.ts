@@ -1,4 +1,4 @@
-import { AUTHOR_KEY, activationCookie } from './activation';
+import { AUTHOR_KEY } from './activation';
 import { createApi } from './api';
 import type { FeedbackApi } from './api';
 import type { ConsoleRecorder } from './console-recorder';
@@ -13,6 +13,7 @@ import type { PinLayer } from './pin-layer';
 import { currentPage } from './pins';
 import { captureViewport } from './screenshot';
 import { computeSelector, elementText } from './selector';
+import { describeTarget } from './target';
 import { CSS } from './styles';
 import type { FeedbackItem } from './types';
 
@@ -161,12 +162,7 @@ export function createApp(deps: AppDeps): App {
         },
         visible ? 'shown' : 'hidden',
       ),
-      item('Hide widget', 'Hide the feedback widget on this browser', () => {
-        try {
-          document.cookie = activationCookie(false);
-        } catch {
-          /* cookies blocked: hiding still takes effect for this page load */
-        }
+      item('Hide until reload', 'Get it out of the way; it comes back on the next page load', () => {
         unmount();
       }),
     );
@@ -220,7 +216,7 @@ export function createApp(deps: AppDeps): App {
   async function onPicked(result: PickResult): Promise<void> {
     const shot = await withHostHidden(() => captureViewport(host));
     const selector = computeSelector(result.el);
-    const element = { tag: result.el.tagName.toLowerCase(), text: elementText(result.el) };
+    const element = describeTarget(result.el, elementText(result.el));
 
     editor = openEditor(layer as HTMLElement, {
       shot,

@@ -5,7 +5,11 @@ export const LIMITS = {
   title: 200,
   selector: 500,
   elementText: 120,
-  userAgent: 400,
+  client: 80,
+  attrValue: 80,
+  classes: 6,
+  ancestors: 6,
+  pathDepth: 20,
   consoleEntries: 20,
   consoleMessage: 500,
 } as const;

@@ -16,11 +16,10 @@ const stickyMarker = "<!-- prevly -->"
 
 // AppStatus is one app's line in the sticky PR comment.
 type AppStatus struct {
-	App         string
-	Status      model.Status
-	URL         string
-	FeedbackURL string // widget activation link; empty hides it
-	LogExcerpt  string // shown only on failure
+	App        string
+	Status     model.Status
+	URL        string
+	LogExcerpt string // shown only on failure
 }
 
 // RenderStickyComment renders the single prevly PR comment body. Pure so it can
@@ -34,9 +33,6 @@ func RenderStickyComment(apps []AppStatus) string {
 		url := "—"
 		if a.URL != "" {
 			url = "[open](" + a.URL + ")"
-			if a.FeedbackURL != "" {
-				url += " · [💬 feedback](" + a.FeedbackURL + ")"
-			}
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", a.App, statusBadge(a.Status), url)
 	}

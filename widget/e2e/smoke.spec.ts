@@ -5,10 +5,7 @@ const BASE = 'http://localhost:4177';
 test('activate, pick a table cell, annotate and submit', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
 
-  await page.goto(`${BASE}/_prevly/activate`);
-
-  await expect(page).toHaveURL(`${BASE}/`);
-  expect(await page.evaluate(() => document.cookie)).toContain('prevly_feedback=1');
+  await page.goto(BASE);
 
   const launcher = page.locator('[data-prevly="launcher"]');
   await expect(launcher).toBeVisible();
@@ -62,16 +59,54 @@ test('activate, pick a table cell, annotate and submit', async ({ page }) => {
   await expect(page.locator('.popover')).toContainText('Le total ne correspond pas');
 });
 
-test('stays dormant without the flag', async ({ page }) => {
+test('comes back after a reload once hidden', async ({ page }) => {
   await page.goto(BASE);
-  await page.context().clearCookies();
+  await expect(page.locator('[data-prevly="launcher"]')).toBeVisible();
+  await page.evaluate(() => window.__prevlyFeedback?.hide());
+  await expect(page.locator('[data-prevly="launcher"]')).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('prevly-feedback')).toHaveCount(0);
-  expect(await page.evaluate(() => typeof window.__prevlyFeedback?.open)).toBe('function');
+  await expect(page.locator('[data-prevly="launcher"]')).toBeVisible();
 });
 
-test('activation survives an app that redirects the entry url', async ({ page }) => {
-  await page.goto(`${BASE}/_prevly/activate?to=/redirect-me`);
+test('is on even on a page reached through a redirect', async ({ page }) => {
+  await page.goto(`${BASE}/redirect-me`);
   await expect(page).toHaveURL(`${BASE}/`);
   await expect(page.locator('[data-prevly="launcher"]')).toBeVisible();
+});
+
+test('sends the location detail an agent needs', async ({ page }) => {
+  await page.request.get(`${BASE}/_dev/reset`);
+  await page.goto(BASE);
+  await page.locator('[data-prevly="launcher"]').click();
+  await page.getByRole('menuitem', { name: 'New feedback' }).click();
+  await page.locator('#grand-total').click();
+  await expect(page.locator('.canvas-wrap canvas')).toBeVisible({ timeout: 30_000 });
+
+  await page.locator('[data-prevly="comment"]').fill('Montant faux.');
+  await page.locator('[data-prevly="author"]').fill('Thomas');
+  await page.locator('[data-prevly="send"]').click();
+  await expect(page.locator('[data-prevly="toast"]')).toBeVisible({ timeout: 30_000 });
+
+  const received = await (await page.request.get(`${BASE}/_dev/received`)).json();
+  const el = received[0].meta.element;
+  expect(el.tag).toBe('td');
+  expect(el.xpath).toMatch(/^\/html\/body/);
+  expect(el.attrs.id).toBe('grand-total');
+  expect(el.ancestors.length).toBeGreaterThan(1);
+  expect(el.heading).toBeTruthy();
+  expect(received[0].meta.client).toMatch(/ on /);
+  expect(JSON.stringify(received[0].meta)).not.toContain('Mozilla/5.0');
+});
+
+test('picks the arrow tool', async ({ page }) => {
+  await page.goto(BASE);
+  await page.locator('[data-prevly="launcher"]').click();
+  await page.getByRole('menuitem', { name: 'New feedback' }).click();
+  await page.locator('#grand-total').click();
+  await expect(page.locator('.canvas-wrap canvas')).toBeVisible({ timeout: 30_000 });
+
+  const arrow = page.getByRole('button', { name: 'Tool: Arrow' });
+  await arrow.click();
+  await expect(arrow).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Tool: Rectangle' })).toHaveAttribute('aria-pressed', 'false');
 });

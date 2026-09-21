@@ -1,5 +1,6 @@
+import { clientLabel } from './client-label';
 import { LIMITS, clamp, collapse } from './limits';
-import type { ConsoleEntry, ElementInfo, FeedbackMeta, Point, Rect, Viewport } from './types';
+import type { ConsoleEntry, FeedbackMeta, Point, Rect, TargetInfo, Viewport } from './types';
 
 export interface MetaInput {
   author: string;
@@ -7,7 +8,7 @@ export interface MetaInput {
   page: string;
   title?: string | null;
   selector?: string | null;
-  element?: ElementInfo | null;
+  element?: TargetInfo | null;
   click?: Point | null;
   rect?: Rect | null;
   viewport: Viewport;
@@ -25,7 +26,7 @@ export function buildMeta(input: MetaInput): FeedbackMeta {
       h: Math.round(input.viewport.h),
       dpr: round2(input.viewport.dpr),
     },
-    userAgent: clamp(input.userAgent ?? '', LIMITS.userAgent),
+    client: clamp(clientLabel(input.userAgent ?? ''), LIMITS.client),
     console: clampConsole(input.console ?? []),
   };
 
@@ -36,10 +37,17 @@ export function buildMeta(input: MetaInput): FeedbackMeta {
   if (selector) meta.selector = clamp(selector, LIMITS.selector);
 
   if (input.element) {
-    meta.element = {
-      tag: input.element.tag.toLowerCase(),
-      text: clamp(collapse(input.element.text), LIMITS.elementText),
+    const el = input.element;
+    const target: TargetInfo = {
+      tag: el.tag.toLowerCase(),
+      text: clamp(collapse(el.text), LIMITS.elementText),
     };
+    if (el.xpath) target.xpath = clamp(el.xpath, LIMITS.selector);
+    if (el.attrs && Object.keys(el.attrs).length) target.attrs = el.attrs;
+    if (el.classes?.length) target.classes = el.classes;
+    if (el.ancestors?.length) target.ancestors = el.ancestors;
+    if (el.heading) target.heading = clamp(collapse(el.heading), LIMITS.elementText);
+    meta.element = target;
   }
 
   if (input.click) meta.click = { x: Math.round(input.click.x), y: Math.round(input.click.y) };

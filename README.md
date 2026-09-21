@@ -81,14 +81,19 @@ prevly version   version info
 Reviewers annotate a running preview and the annotation lands as a comment on
 the pull request. Nothing is installed in the previewed app: the daemon injects
 one `<script>` tag into the HTML it proxies, and the widget talks to the daemon
-on the same origin under `/_prevly/`. It stays dormant until activated from the
-`💬 feedback` link in the sticky PR comment.
+on the same origin under `/_prevly/`. It is on by default on every preview;
+"Hide until reload" gets it out of the way for the current page.
 
-Each report becomes one PR comment with the page, the pointed-at element, the
-screenshot and the captured console. Screenshots are served from the base
-domain so they outlive the preview. Turn it off host-wide with
-`feedback.enabled: false`, or per repo with `feedback: false` in `.prevly.yml`.
-See [`docs/feedback.md`](./docs/feedback.md).
+Each report becomes one PR comment: the reviewer's words in plain sight, and
+the screenshot, the console and a location table folded underneath. The table
+carries the selector, the XPath, the element's locating attributes, its
+ancestors and the nearest heading, so whoever picks the report up — a person or
+an agent — finds the element without guessing. No IP address is stored and the
+raw user agent never leaves the browser, only a "Chrome 152 on macOS" label.
+
+Screenshots are served from the base domain so they outlive the preview. Turn
+it off host-wide with `feedback.enabled: false`, or per repo with
+`feedback: false` in `.prevly.yml`. See [`docs/feedback.md`](./docs/feedback.md).
 
 ## Core principles
 

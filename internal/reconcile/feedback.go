@@ -67,11 +67,10 @@ func (r *Reconciler) updateComment(ctx context.Context, ev *gh.PullRequestEvent)
 	statuses := make([]gh.AppStatus, 0, len(previews))
 	for _, p := range previews {
 		statuses = append(statuses, gh.AppStatus{
-			App:         p.AppName,
-			Status:      p.Status,
-			URL:         liveURL(p),
-			FeedbackURL: r.feedbackURL(p),
-			LogExcerpt:  p.FailureLog,
+			App:        p.AppName,
+			Status:     p.Status,
+			URL:        liveURL(p),
+			LogExcerpt: p.FailureLog,
 		})
 	}
 	body := gh.RenderStickyComment(statuses)
@@ -102,19 +101,6 @@ func liveURL(p *model.Preview) string {
 		return p.URL
 	}
 	return ""
-}
-
-// feedbackURL returns the widget activation link for a live preview, or "" when
-// feedback is off on the host or in the repo.
-func (r *Reconciler) feedbackURL(p *model.Preview) string {
-	if !r.cfg.Feedback.On() || !p.FeedbackOn() {
-		return ""
-	}
-	url := liveURL(p)
-	if url == "" {
-		return ""
-	}
-	return url + "/_prevly/activate"
 }
 
 // surfaceCapacityError tells the PR that the host has no preview slot left,

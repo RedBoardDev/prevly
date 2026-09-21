@@ -116,7 +116,7 @@ func validMeta() string {
 	return `{"author":"Thomas","comment":"The total is wrong","page":"/reports/123?tab=costs",` +
 		`"title":"Report","selector":"main td.total","element":{"tag":"td","text":"1 234,00 €"},` +
 		`"click":{"x":812,"y":403},"rect":{"x":780,"y":390,"w":96,"h":28},` +
-		`"viewport":{"w":1440,"h":900,"dpr":2},"userAgent":"Mozilla/5.0",` +
+		`"viewport":{"w":1440,"h":900,"dpr":2},"client":"Chrome 152 on macOS",` +
 		`"console":[{"level":"error","message":"TypeError: boom","at":"2026-09-21T10:12:33Z"}]}`
 }
 
@@ -228,7 +228,7 @@ func TestCreateStoresPostsAndLists(t *testing.T) {
 	if stored.Repo != "org/repo" || stored.PRNumber != 42 || stored.AppName != "web" || stored.Host != previewHost {
 		t.Fatalf("record not bound to the preview: %+v", stored)
 	}
-	if stored.CommitSHA != "abc1234def" || len(stored.Console) != 1 || stored.UserAgent != "Mozilla/5.0" {
+	if stored.CommitSHA != "abc1234def" || len(stored.Console) != 1 || stored.Client != "Chrome 152 on macOS" {
 		t.Fatalf("record lost fields: %+v", stored)
 	}
 	if stored.CommentID == 0 {
@@ -478,40 +478,3 @@ func TestControlHandlerHasNoAPI(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool { return &b }
-
-func TestActivateSetsCookieAndRedirects(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t, defaultConfig())
-
-	rec := get(t, f.svc.PreviewHandler(), previewHost, "/_prevly/activate")
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302", rec.Code)
-	}
-	if got := rec.Header().Get("Location"); got != "/" {
-		t.Fatalf("Location = %q", got)
-	}
-	var found *http.Cookie
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == "prevly_feedback" {
-			found = c
-		}
-	}
-	if found == nil || found.Value != "1" || found.Path != "/" || found.MaxAge <= 0 {
-		t.Fatalf("activation cookie = %+v", found)
-	}
-}
-
-func TestActivateRedirectTargetStaysOnTheApp(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct{ in, want string }{
-		{"/reports/12?tab=costs", "/reports/12?tab=costs"},
-		{"//evil.example.com", "/"},
-		{"https://evil.example.com", "/"},
-		{"/_prevly/activate", "/"},
-		{"", "/"},
-	} {
-		if got := redirectTarget(tc.in); got != tc.want {
-			t.Fatalf("redirectTarget(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}

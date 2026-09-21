@@ -16,18 +16,11 @@ browser ── POST /_prevly/api/feedback         ──▶ daemon: store + PR c
 GitHub  ── GET  https://<base>/_prevly/feedback/<id>/screenshot.png (camo fetch)
 ```
 
-The widget stays dormant until activated once per browser: the sticky PR
-comment links to `<preview-url>/_prevly/activate`, which sets the cookie
-`prevly_feedback=1` (path `/`, 90 days, `SameSite=Lax`, readable from
-JavaScript) and redirects to `/`, or to `?to=<absolute path>` when given one.
-Without that cookie the script injects nothing into the DOM. The widget menu
-has "Hide", which expires the cookie.
-
-The flag cannot ride on a query parameter: every app sitting behind a login
-answers the entry URL with a redirect that drops the query string before any
-script of ours runs, so a `?prevly_feedback=1` link never activates anything.
-The query form is still honoured for local development, where the mock does
-not redirect.
+The widget is on wherever the daemon injects it. There is no activation step:
+`feedback.enabled` on the host and `feedback` in `.prevly.yml` are the only
+switches. The menu has "Hide until reload", which unmounts it for the current
+page only, the way a framework's dev indicator behaves; the next page load
+brings it back.
 
 ## Routing on a preview host
 
@@ -36,7 +29,6 @@ never reaches the container. It does not wake a sleeping preview.
 
 | Method | Path | Answer |
 |---|---|---|
-| GET | `/_prevly/activate` | `302` to `to` (an absolute same-origin path) or `/`, with the activation cookie |
 | GET | `/_prevly/feedback.js` | the widget bundle, `application/javascript`, `Cache-Control: no-cache` |
 | GET | `/_prevly/api/feedback` | `200 {"items":[Feedback…]}` for this host, newest first, no binary |
 | POST | `/_prevly/api/feedback` | multipart, see below. `201 {"item":Feedback}` |
@@ -64,11 +56,19 @@ Unknown host (no preview in the store) → `404` as today.
   "page": "/reports/123?tab=costs",   // path + query of the page, required, must start with "/", <= 2048
   "title": "Report – KARE",           // document.title, ≤ 200
   "selector": "main > table tr:nth-child(3) td.total",  // ≤ 500, optional
-  "element": { "tag": "td", "text": "1 234,00 €" },      // text ≤ 120, optional
+  "element": {                        // optional, everything needed to find it again
+    "tag": "td",
+    "text": "1 234,00 €",             // ≤ 120
+    "xpath": "/html/body/main/table/tbody/tr[3]/td[4]",
+    "attrs": { "id": "grand-total" }, // allowlisted locating attributes only, never `value`
+    "classes": ["total"],             // ≤ 8, each ≤ 80
+    "ancestors": ["main#report", "table.prestations"], // ≤ 8
+    "heading": "Détail des prestations"
+  },
   "click": { "x": 812, "y": 403 },    // viewport coords of the click, optional
   "rect":  { "x": 780, "y": 390, "w": 96, "h": 28 },     // element rect in viewport, optional
   "viewport": { "w": 1440, "h": 900, "dpr": 2 },
-  "userAgent": "…",                   // ≤ 400
+  "client": "Chrome 152 on macOS",    // coarse label, never the raw user agent, ≤ 80
   "console": [                        // ≤ 20 entries, each message ≤ 500 chars
     { "level": "error", "message": "TypeError: …", "at": "2026-09-21T10:12:33Z" }
   ]
@@ -100,8 +100,10 @@ and the reconcile loop retries it on its next tick.
 }
 ```
 
-`userAgent` and `console` are stored and rendered in the PR comment but not
-returned by the list endpoint.
+`client` and `console` are stored and rendered in the PR comment but not
+returned by the list endpoint. No IP address is ever read or stored, and the
+raw user agent never leaves the browser: the widget derives a browser and
+platform label from it and sends only that.
 
 `<!--` and `-->` in reviewer-supplied text are escaped before rendering: a body
 containing `<!-- prevly -->` would otherwise be found by the sticky-comment
@@ -113,17 +115,34 @@ One plain comment per feedback (never the sticky one), authored by the App.
 
 ```markdown
 <!-- prevly-feedback:01J8… -->
-### 💬 Feedback on `kare` · [/reports/123?tab=costs](https://pr-1268-rs.<base>/reports/123?tab=costs)
+### 💬 Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-rs.<base>/reports/123?tab=costs>)
 
 > The total is wrong
 
+<details><summary>Screenshot</summary>
+
 ![screenshot](https://<base>/_prevly/feedback/01J8…/screenshot.png)
 
-**Element:** `main > table tr:nth-child(3) td.total` · "1 234,00 €" · at (812, 403)
+</details>
 
-<details><summary>Environment</summary>
+<details><summary>Where exactly</summary>
 
-Reported by Thomas · viewport 1440×900 @2x · commit `abc1234` · <userAgent, verbatim>
+| | |
+|---|---|
+| URL | <https://pr-1268-rs.<base>/reports/123?tab=costs> |
+| App | `kare` |
+| Section | Détail des prestations |
+| CSS selector | `main > table tr:nth-child(3) td.total` |
+| Element | `<td>` |
+| Element text | "1 234,00 €" |
+| Attributes | `id="grand-total"` |
+| Ancestors | `main#report > table.prestations > tbody > tr` |
+| XPath | `/html/body/main/table/tbody/tr[3]/td[4]` |
+| Clicked at | x 812, y 403 in the viewport |
+| Viewport | 1440×900 @2x |
+| Commit | `abc1234` |
+| Browser | Chrome 152 on macOS |
+| Reported | 2026-09-21 10:12 UTC |
 </details>
 
 <details><summary>Console (2 errors)</summary>
@@ -131,18 +150,26 @@ Reported by Thomas · viewport 1440×900 @2x · commit `abc1234` · <userAgent, 
 ```
 2026-09-21T10:12:33Z error TypeError: …
 ```
+
 </details>
 ```
 
-The sticky comment gains a feedback link per live app:
-`| kare | 🟢 live | [open](url) · [💬 feedback](url/_prevly/activate) |`.
+Only the heading and the reviewer's own words are visible. The screenshot, the
+location table and the console are folded, so a pull request collecting a dozen
+reports stays readable.
+2026-09-21T10:12:33Z error TypeError: …
+```
+</details>
+```
+
+Nothing is added to the sticky comment: the widget is already there.
 
 ## Storage
 
 bbolt bucket `feedback`, key `<repo>#<pr>#<app>#<id>` (id is Crockford base32
 of a 6-byte millisecond timestamp + 10 random bytes, so keys sort by age), JSON
 value (the full
-record incl. userAgent/console, plus `comment_id`, `installation_id`, `host`,
+record incl. client/console, plus `comment_id`, `installation_id`, `host`,
 `commit_sha`, `screenshot` bool). Screenshots on disk:
 `<data_dir>/feedback/<id>.png`.
 

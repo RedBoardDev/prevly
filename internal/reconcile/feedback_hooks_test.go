@@ -78,43 +78,6 @@ func TestLoopTickRunsFeedbackTick(t *testing.T) {
 	}
 }
 
-func TestFeedbackURL(t *testing.T) {
-	t.Parallel()
-	rec, _ := newHookedReconciler(t, &Deps{})
-
-	live := &model.Preview{
-		Status: model.StatusRunning, URL: "https://pr-42-web.preview.example.com",
-		FeedbackEnabled: boolPtr(true),
-	}
-	if got := rec.feedbackURL(live); got != "https://pr-42-web.preview.example.com/_prevly/activate" {
-		t.Fatalf("feedbackURL = %q", got)
-	}
-
-	sleeping := *live
-	sleeping.Status = model.StatusSleeping
-	if rec.feedbackURL(&sleeping) == "" {
-		t.Fatal("a sleeping preview still takes feedback")
-	}
-
-	optedOut := *live
-	optedOut.FeedbackEnabled = boolPtr(false)
-	if got := rec.feedbackURL(&optedOut); got != "" {
-		t.Fatalf("opted-out repo: feedbackURL = %q", got)
-	}
-
-	failed := *live
-	failed.Status = model.StatusFailed
-	if got := rec.feedbackURL(&failed); got != "" {
-		t.Fatalf("failed preview: feedbackURL = %q", got)
-	}
-
-	off := false
-	rec.cfg.Feedback.Enabled = &off
-	if got := rec.feedbackURL(live); got != "" {
-		t.Fatalf("host-wide off: feedbackURL = %q", got)
-	}
-}
-
 func TestDeploySnapshotsRepoOptIn(t *testing.T) {
 	t.Parallel()
 	optOut := false

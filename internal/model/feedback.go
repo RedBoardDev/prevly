@@ -5,10 +5,16 @@ import (
 	"time"
 )
 
-// Element is the DOM element a reviewer pointed at.
+// Element is the DOM element a reviewer pointed at, described well enough that
+// a reader never has to guess which node is meant.
 type Element struct {
-	Tag  string `json:"tag,omitempty"`
-	Text string `json:"text,omitempty"`
+	Tag       string            `json:"tag,omitempty"`
+	Text      string            `json:"text,omitempty"`
+	XPath     string            `json:"xpath,omitempty"`
+	Attrs     map[string]string `json:"attrs,omitempty"`
+	Classes   []string          `json:"classes,omitempty"`
+	Ancestors []string          `json:"ancestors,omitempty"`
+	Heading   string            `json:"heading,omitempty"`
 }
 
 // Point is a viewport coordinate.
@@ -62,7 +68,7 @@ type Feedback struct {
 	Host           string `json:"host"`
 	InstallationID int64  `json:"installation_id"`
 	CommitSHA      string `json:"commit_sha,omitempty"`
-	UserAgent      string `json:"user_agent,omitempty"`
+	Client         string `json:"client,omitempty"`
 
 	Console       []ConsoleEntry `json:"console,omitempty"`
 	HasScreenshot bool           `json:"screenshot"`

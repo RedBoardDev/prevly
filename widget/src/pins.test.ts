@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { currentPage, forPage, resolvePins } from './pins';
+import { computeSelector } from './selector';
 import type { FeedbackItem } from './types';
 
 function item(partial: Partial<FeedbackItem> & { id: string }): FeedbackItem {
@@ -78,5 +79,27 @@ describe('resolvePins', () => {
     const { matched, orphans } = resolvePins(items, '/reports', document, host);
     expect(matched).toHaveLength(0);
     expect(orphans).toHaveLength(1);
+  });
+});
+
+describe('selector stability', () => {
+  it('never builds a selector on a pointer or focus state attribute', () => {
+    document.body.innerHTML = `
+      <main>
+        <form>
+          <button data-hovered="true" data-pressed="true" aria-expanded="false" class="btn">Se connecter</button>
+        </form>
+      </main>`;
+    const button = document.querySelector('button') as Element;
+
+    const selector = computeSelector(button);
+    expect(selector).toBeTruthy();
+    expect(selector).not.toContain('data-hovered');
+    expect(selector).not.toContain('data-pressed');
+    expect(selector).not.toContain('aria-expanded');
+
+    button.removeAttribute('data-hovered');
+    button.removeAttribute('data-pressed');
+    expect(document.querySelectorAll(selector as string)).toHaveLength(1);
   });
 });

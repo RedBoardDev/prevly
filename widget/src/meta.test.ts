@@ -19,7 +19,7 @@ describe('buildMeta', () => {
       element: { tag: 'TD', text: '  1 234,00 €\n' },
       click: { x: 812.6, y: 403.2 },
       rect: { x: 780.4, y: 390.9, w: 96.2, h: 28.5 },
-      userAgent: 'Mozilla/5.0',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/152.0.0.0 Safari/537.36',
       console: [],
     });
 
@@ -33,7 +33,7 @@ describe('buildMeta', () => {
       click: { x: 813, y: 403 },
       rect: { x: 780, y: 391, w: 96, h: 29 },
       viewport: { w: 1440, h: 901, dpr: 2 },
-      userAgent: 'Mozilla/5.0',
+      client: 'Chrome 152 on macOS',
       console: [],
     });
   });
@@ -61,7 +61,7 @@ describe('buildMeta', () => {
       title: 't'.repeat(900),
       selector: 's'.repeat(900),
       element: { tag: 'div', text: 'e'.repeat(900) },
-      userAgent: 'u'.repeat(900),
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/152.0.7977.76 Safari/537.36',
       console: entries,
     });
 
@@ -70,7 +70,7 @@ describe('buildMeta', () => {
     expect(meta.title).toHaveLength(LIMITS.title);
     expect(meta.selector).toHaveLength(LIMITS.selector);
     expect(meta.element?.text).toHaveLength(LIMITS.elementText);
-    expect(meta.userAgent).toHaveLength(LIMITS.userAgent);
+    expect(meta.client).toBe('Chrome 152 on macOS');
     expect(meta.console).toHaveLength(LIMITS.consoleEntries);
     expect(meta.console[0]?.message).toHaveLength(LIMITS.consoleMessage);
     expect(meta.console[0]?.at).toBe('2026-09-21T10:00:20.000Z');

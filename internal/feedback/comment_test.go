@@ -10,20 +10,27 @@ import (
 
 func sampleRecord() *model.Feedback {
 	return &model.Feedback{
-		ID:        "01J8ABCDEFGHJKMNPQRSTVWXYZ",
-		Repo:      "akord-securite/KARE",
-		PRNumber:  1268,
-		AppName:   "kare",
-		Page:      "/reports/123?tab=costs",
-		Author:    "Thomas",
-		Comment:   "The total is wrong",
-		Selector:  "main > table tr:nth-child(3) td.total",
-		Element:   &model.Element{Tag: "td", Text: "1 234,00 €"},
+		ID:       "01J8ABCDEFGHJKMNPQRSTVWXYZ",
+		Repo:     "akord-securite/KARE",
+		PRNumber: 1268,
+		AppName:  "kare",
+		Page:     "/reports/123?tab=costs",
+		Author:   "Thomas",
+		Comment:  "The total is wrong",
+		Selector: "main > table tr:nth-child(3) td.total",
+		Element: &model.Element{
+			Tag: "td", Text: "1 234,00 €",
+			XPath:     "/html/body/main/table/tbody/tr[3]/td[4]",
+			Attrs:     map[string]string{"id": "grand-total", "data-testid": "total"},
+			Classes:   []string{"total", "num"},
+			Ancestors: []string{"main#report", "table.prestations", "tbody", "tr"},
+			Heading:   "Détail des prestations",
+		},
 		Click:     &model.Point{X: 812, Y: 403},
 		Viewport:  &model.Viewport{W: 1440, H: 900, DPR: 2},
 		CreatedAt: time.Date(2026, 9, 21, 10, 12, 40, 0, time.UTC),
 		CommitSHA: "abc1234def5678",
-		UserAgent: "Mozilla/5.0 Chrome/130",
+		Client:    "Chrome 130 on macOS",
 		Console: []model.ConsoleEntry{
 			{Level: "error", Message: "TypeError: boom", At: "2026-09-21T10:12:33Z"},
 			{Level: "error", Message: "TypeError: bam", At: "2026-09-21T10:12:34Z"},
@@ -38,12 +45,25 @@ func TestRenderComment(t *testing.T) {
 
 	want := []string{
 		"<!-- prevly-feedback:01J8ABCDEFGHJKMNPQRSTVWXYZ -->",
-		"### 💬 Feedback on `kare` · [/reports/123?tab=costs](<https://pr-1268-kare.preview.example.com/reports/123?tab=costs>)",
+		"### 💬 Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-kare.preview.example.com/reports/123?tab=costs>)",
 		"> The total is wrong",
+		"<details><summary>Screenshot</summary>",
 		"![screenshot](https://preview.example.com/_prevly/feedback/01J8ABCDEFGHJKMNPQRSTVWXYZ/screenshot.png)",
-		"**Element:** `main > table tr:nth-child(3) td.total` · \"1 234,00 €\" · at (812, 403)",
-		"<details><summary>Environment</summary>",
-		"Reported by Thomas · viewport 1440×900 @2x · commit `abc1234` · Mozilla/5.0 Chrome/130",
+		"<details><summary>Where exactly</summary>",
+		"| URL | <https://pr-1268-kare.preview.example.com/reports/123?tab=costs> |",
+		"| Section | Détail des prestations |",
+		"| CSS selector | `main > table tr:nth-child(3) td.total` |",
+		"| Element | `<td>` |",
+		`| Element text | "1 234,00 €" |`,
+		"| Attributes | `data-testid=\"total\"` `id=\"grand-total\"` |",
+		"| Classes | `.total.num` |",
+		"| Ancestors | `main#report > table.prestations > tbody > tr` |",
+		"| XPath | `/html/body/main/table/tbody/tr[3]/td[4]` |",
+		"| Clicked at | x 812, y 403 in the viewport |",
+		"| Viewport | 1440×900 @2x |",
+		"| Commit | `abc1234` |",
+		"| Browser | Chrome 130 on macOS |",
+		"| Reported | 2026-09-21 10:12 UTC |",
 		"<details><summary>Console (2 errors)</summary>",
 		"2026-09-21T10:12:33Z error TypeError: boom",
 	}
@@ -57,6 +77,28 @@ func TestRenderComment(t *testing.T) {
 	}
 }
 
+// Everything but the reviewer's own words is folded, so a PR with many reports
+// stays readable.
+func TestRenderCommentFoldsEverythingButTheWords(t *testing.T) {
+	t.Parallel()
+	body := RenderComment(sampleRecord(), "preview.example.com", "https://pr-1268-kare.preview.example.com")
+
+	visible, _, found := strings.Cut(body, "<details>")
+	if !found {
+		t.Fatal("nothing is folded")
+	}
+	if strings.Contains(visible, "screenshot") || strings.Contains(visible, "XPath") ||
+		strings.Contains(visible, "Viewport") || strings.Contains(visible, "TypeError") {
+		t.Fatalf("context leaked above the fold:\n%s", visible)
+	}
+	if !strings.Contains(visible, "> The total is wrong") {
+		t.Fatalf("the reviewer's words must stay visible:\n%s", visible)
+	}
+	if strings.Count(body, "<details>") != strings.Count(body, "</details>") {
+		t.Fatal("unbalanced details blocks")
+	}
+}
+
 func TestRenderCommentMinimal(t *testing.T) {
 	t.Parallel()
 	f := &model.Feedback{
@@ -67,14 +109,17 @@ func TestRenderCommentMinimal(t *testing.T) {
 	if strings.Contains(body, "![screenshot]") {
 		t.Fatal("no screenshot line without an image")
 	}
-	if strings.Contains(body, "**Element:**") {
-		t.Fatal("no element line without a selector, element or click")
+	if strings.Contains(body, "<details><summary>Screenshot") {
+		t.Fatal("no screenshot block without an image")
+	}
+	if strings.Contains(body, "XPath") || strings.Contains(body, "Element text") {
+		t.Fatal("no element rows without an element")
 	}
 	if strings.Contains(body, "Console (") {
 		t.Fatal("no console block without entries")
 	}
-	if !strings.Contains(body, "Reported by T") {
-		t.Fatalf("environment block missing:\n%s", body)
+	if !strings.Contains(body, "### 💬 T · `web`") {
+		t.Fatalf("heading missing:\n%s", body)
 	}
 }
 
