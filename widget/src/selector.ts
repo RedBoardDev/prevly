@@ -1,4 +1,5 @@
 import { finder } from '@medv/finder';
+import { isStableAttr, isStableName } from './stability';
 import { LIMITS, clamp } from './limits';
 
 export function computeSelector(el: Element, doc: Document = document): string | null {
@@ -12,22 +13,6 @@ export function computeSelector(el: Element, doc: Document = document): string |
   return null;
 }
 
-// React Aria (and so HeroUI) writes the pointer and focus state onto the DOM as
-// data attributes. A selector built on one of them matches only while the mouse
-// sits where the reviewer left it, so the pin never finds its element again.
-const VOLATILE_ATTR = /^(data-(hovered|focused|focus-visible|pressed|selected|open|state|highlighted|placement|rac|headlessui-state)|aria-(expanded|selected|checked|pressed|current|activedescendant|describedby|labelledby|controls|owns))$/;
-
-// Framework-generated ids and classes change on every build or hydration.
-const VOLATILE_NAME = /(^|[-_:])(react-aria|radix|headlessui|mui|emotion|css)[-_:]?\w*\d/i;
-
-function stableAttr(name: string, value: string): boolean {
-  if (VOLATILE_ATTR.test(name)) return false;
-  return value.length <= 80;
-}
-
-function stableName(name: string): boolean {
-  return !VOLATILE_NAME.test(name);
-}
 
 function tryFinder(el: Element, root: Element): string | null {
   try {
@@ -36,9 +21,9 @@ function tryFinder(el: Element, root: Element): string | null {
       timeoutMs: 800,
       seedMinLength: 2,
       optimizedMinLength: 2,
-      attr: stableAttr,
-      idName: stableName,
-      className: stableName,
+      attr: isStableAttr,
+      idName: isStableName,
+      className: isStableName,
     });
   } catch {
     return null;

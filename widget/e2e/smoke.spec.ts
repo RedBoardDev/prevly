@@ -98,15 +98,38 @@ test('sends the location detail an agent needs', async ({ page }) => {
   expect(JSON.stringify(received[0].meta)).not.toContain('Mozilla/5.0');
 });
 
-test('picks the arrow tool', async ({ page }) => {
+test('offers a pen and nothing else to fiddle with', async ({ page }) => {
   await page.goto(BASE);
   await page.locator('[data-prevly="launcher"]').click();
   await page.getByRole('menuitem', { name: 'New feedback' }).click();
   await page.locator('#grand-total').click();
   await expect(page.locator('.canvas-wrap canvas')).toBeVisible({ timeout: 30_000 });
 
-  const arrow = page.getByRole('button', { name: 'Tool: Arrow' });
-  await arrow.click();
-  await expect(arrow).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Tool: Rectangle' })).toHaveAttribute('aria-pressed', 'false');
+  const tools = await page.locator('.tools button').allInnerTexts();
+  expect(tools).toEqual(['Undo', 'Clear']);
+});
+
+test('keeps generated ids and hashed classes out of the report', async ({ page }) => {
+  await page.request.get(`${BASE}/_dev/reset`);
+  await page.goto(BASE);
+  await page.evaluate(() => {
+    const cell = document.querySelector('#grand-total') as HTMLElement;
+    cell.id = 'react-aria-_R_5klubsnqbb_';
+    cell.className = 'geist_a71539c9-module__T19VSG__total';
+    cell.setAttribute('data-hovered', 'true');
+  });
+  await page.locator('[data-prevly="launcher"]').click();
+  await page.getByRole('menuitem', { name: 'New feedback' }).click();
+  await page.locator('#react-aria-_R_5klubsnqbb_').click();
+  await expect(page.locator('.canvas-wrap canvas')).toBeVisible({ timeout: 30_000 });
+  await page.locator('[data-prevly="comment"]').fill('Montant faux.');
+  await page.locator('[data-prevly="author"]').fill('Thomas');
+  await page.locator('[data-prevly="send"]').click();
+  await expect(page.locator('[data-prevly="toast"]')).toBeVisible({ timeout: 30_000 });
+
+  const received = await (await page.request.get(`${BASE}/_dev/received`)).json();
+  const payload = JSON.stringify(received[0].meta);
+  expect(payload).not.toContain('react-aria');
+  expect(payload).not.toContain('module__');
+  expect(payload).not.toContain('data-hovered');
 });
