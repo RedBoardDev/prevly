@@ -18,7 +18,8 @@
 .DS_Store
 
 # Internal handoff docs (kept local, not published)
-/docs/
+/docs/*
+!/docs/feedback.md
 /spec.md
 
 # Local tooling / agent files (not published)

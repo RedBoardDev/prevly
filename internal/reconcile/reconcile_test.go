@@ -98,6 +98,8 @@ type fakeGitHub struct {
 	pr         *gh.PullRequestEvent
 
 	comments    int
+	posted      []string
+	postErr     error
 	replies     int
 	deployments int
 	statuses    []model.Status
@@ -118,6 +120,14 @@ func (f *fakeGitHub) UpsertComment(context.Context, int64, string, string, int, 
 	f.comments++
 	return 1, nil
 }
+func (f *fakeGitHub) PostComment(_ context.Context, _ int64, _, _ string, _ int, body string) (int64, string, error) {
+	if f.postErr != nil {
+		return 0, "", f.postErr
+	}
+	f.posted = append(f.posted, body)
+	return int64(len(f.posted)), "https://github.com/org/repo/pull/1#issuecomment-1", nil
+}
+
 func (f *fakeGitHub) Reply(context.Context, int64, string, string, int, string) error {
 	f.replies++
 	return nil

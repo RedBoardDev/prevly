@@ -76,6 +76,20 @@ prevly doctor    check Docker access, config, disk, rootless
 prevly version   version info
 ```
 
+## Preview feedback
+
+Reviewers annotate a running preview and the annotation lands as a comment on
+the pull request. Nothing is installed in the previewed app: the daemon injects
+one `<script>` tag into the HTML it proxies, and the widget talks to the daemon
+on the same origin under `/_prevly/`. It stays dormant until activated from the
+`💬 feedback` link in the sticky PR comment.
+
+Each report becomes one PR comment with the page, the pointed-at element, the
+screenshot and the captured console. Screenshots are served from the base
+domain so they outlive the preview. Turn it off host-wide with
+`feedback.enabled: false`, or per repo with `feedback: false` in `.prevly.yml`.
+See [`docs/feedback.md`](./docs/feedback.md).
+
 ## Core principles
 
 - **Single Go binary.** The daemon is also the reverse proxy and the ACME

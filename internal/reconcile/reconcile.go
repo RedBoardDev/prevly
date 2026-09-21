@@ -6,6 +6,7 @@
 package reconcile
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -27,6 +28,12 @@ type Deps struct {
 	GitHub  GitHub
 	Logger  *applog.Logger
 	WorkDir string // base dir for PR checkouts
+
+	// OnTeardown, when set, is called after a preview is destroyed so satellite
+	// state (reviewer feedback) can be dropped with it.
+	OnTeardown func(repo string, pr int, app string)
+	// FeedbackTick, when set, runs once per reconcile tick.
+	FeedbackTick func(ctx context.Context)
 }
 
 // Reconciler orchestrates the preview lifecycle.
@@ -40,6 +47,9 @@ type Reconciler struct {
 	logger   *applog.Logger
 	workDir  string
 	buildSem chan struct{}
+
+	onTeardown   func(repo string, pr int, app string)
+	feedbackTick func(ctx context.Context)
 
 	// readyTimeout bounds the post-deploy readiness wait.
 	readyTimeout time.Duration
@@ -89,6 +99,8 @@ func New(d Deps) *Reconciler {
 		lastPruneAt:  time.Now(),
 		now:          time.Now,
 		closedPRs:    map[prKey]time.Time{},
+		onTeardown:   d.OnTeardown,
+		feedbackTick: d.FeedbackTick,
 	}
 }
 

@@ -40,4 +40,9 @@ defaults:
   ttl: 30d
   idle: 6h
 
+feedback:                          # in-preview reviewer widget -> PR comments
+  enabled: true                    # false disables injection and the API
+  retention: 90d                   # how long screenshot files are kept on disk
+  max_per_hour: 30                 # reports accepted per preview host per hour
+
 data_dir: /var/lib/prevly          # bbolt state + certs

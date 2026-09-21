@@ -21,7 +21,13 @@ type RepoConfig struct {
 	Apps     []AppConfig `yaml:"apps"`
 	TTL      Duration    `yaml:"ttl"`
 	Idle     Duration    `yaml:"idle"`
+	// Feedback opts the repo out of the preview feedback widget when false.
+	// A pointer so an omitted key keeps the default (true).
+	Feedback *bool `yaml:"feedback"`
 }
+
+// FeedbackOn reports whether the repo accepts the preview feedback widget.
+func (c *RepoConfig) FeedbackOn() bool { return c == nil || c.Feedback == nil || *c.Feedback }
 
 // Triggers decides which PRs get previews.
 type Triggers struct {

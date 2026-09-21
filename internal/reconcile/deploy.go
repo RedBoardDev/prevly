@@ -99,6 +99,7 @@ func (r *Reconciler) upsertBuilding(ev *gh.PullRequestEvent, repoCfg *config.Rep
 	p.Status = model.StatusBuilding
 	p.TTL = r.ttlFor(repoCfg)
 	p.Idle = r.idleFor(repoCfg)
+	p.FeedbackEnabled = repoCfg.FeedbackOn()
 	if p.LastSeenAt.IsZero() {
 		p.LastSeenAt = r.now()
 	}
@@ -264,6 +265,9 @@ func (r *Reconciler) teardownPreview(ctx context.Context, p *model.Preview) erro
 	// Before store.Delete: it drops DeploymentID, and a deployment nothing can
 	// address again stays green on the PR forever.
 	r.deactivateDeployment(ctx, p)
+	if r.onTeardown != nil {
+		r.onTeardown(p.Repo, p.PRNumber, p.AppName)
+	}
 	r.logger.Info("preview destroyed", "repo", p.Repo, "pr", p.PRNumber, "app", p.AppName)
 	return r.store.Delete(p.Repo, p.PRNumber, p.AppName)
 }

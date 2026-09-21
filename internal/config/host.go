@@ -25,6 +25,7 @@ type HostConfig struct {
 	Secrets    map[string]string `yaml:"secrets"`
 	Limits     Limits            `yaml:"limits"`
 	Defaults   Defaults          `yaml:"defaults"`
+	Feedback   FeedbackConfig    `yaml:"feedback"`
 	DataDir    string            `yaml:"data_dir"`
 
 	// HTTPAddr is the listen address for the HTTP server (webhooks + ACME
@@ -67,6 +68,19 @@ type PerPreview struct {
 	// write at runtime; enable it where the app tolerates it.
 	ReadOnly bool `yaml:"read_only"`
 }
+
+// FeedbackConfig configures the in-preview feedback widget: script injection,
+// the API served on preview hosts, and the screenshots kept on disk.
+type FeedbackConfig struct {
+	// Enabled is a pointer so an explicit `false` is distinguishable from an
+	// omitted key, which defaults to true.
+	Enabled    *bool    `yaml:"enabled"`
+	Retention  Duration `yaml:"retention"`
+	MaxPerHour int      `yaml:"max_per_hour"`
+}
+
+// On reports whether feedback is enabled (the default when the key is absent).
+func (f FeedbackConfig) On() bool { return f.Enabled == nil || *f.Enabled }
 
 // Defaults provide fallbacks for lifecycle values omitted in `.prevly.yml`.
 type Defaults struct {
@@ -123,6 +137,16 @@ func (c *HostConfig) applyDefaults() {
 	if c.Defaults.Idle == 0 {
 		c.Defaults.Idle = Duration(6 * 60 * 60 * 1e9) // 6h
 	}
+	if c.Feedback.Enabled == nil {
+		on := true
+		c.Feedback.Enabled = &on
+	}
+	if c.Feedback.Retention == 0 {
+		c.Feedback.Retention = Duration(90 * day)
+	}
+	if c.Feedback.MaxPerHour == 0 {
+		c.Feedback.MaxPerHour = 30
+	}
 }
 
 // Validate enforces host-config invariants.
@@ -151,6 +175,12 @@ func (c *HostConfig) Validate() error {
 	// external mode never talks to ACME, so it has no account to register.
 	if c.TLS.Mode != TLSModeExternal && c.TLS.Email == "" {
 		return fmt.Errorf("tls.email (ACME account email) is required")
+	}
+	if c.Feedback.Retention < 0 {
+		return fmt.Errorf("feedback.retention must be positive")
+	}
+	if c.Feedback.MaxPerHour < 0 {
+		return fmt.Errorf("feedback.max_per_hour must be positive")
 	}
 	// The GitHub App is optional in config: when app_id is unset the daemon
 	// creates one through the in-daemon setup flow and persists it under

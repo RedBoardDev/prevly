@@ -16,7 +16,10 @@ import (
 // ErrNotFound is returned when a preview key does not exist.
 var ErrNotFound = errors.New("preview not found")
 
-var previewsBucket = []byte("previews")
+var (
+	previewsBucket = []byte("previews")
+	feedbackBucket = []byte("feedback")
+)
 
 // Store is a bbolt-backed Preview repository. It is safe for concurrent use.
 type Store struct {
@@ -31,8 +34,12 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		_, e := tx.CreateBucketIfNotExists(previewsBucket)
-		return e
+		for _, name := range [][]byte{previewsBucket, feedbackBucket} {
+			if _, e := tx.CreateBucketIfNotExists(name); e != nil {
+				return e
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		_ = db.Close()
