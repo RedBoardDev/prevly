@@ -10,7 +10,12 @@ import (
 func TestRenderStickyComment(t *testing.T) {
 	t.Parallel()
 	body := RenderStickyComment([]AppStatus{
-		{App: "bo", Status: model.StatusRunning, URL: "https://pr-42-bo.example.com"},
+		{
+			App:         "bo",
+			Status:      model.StatusRunning,
+			URL:         "https://pr-42-bo.example.com",
+			FeedbackURL: "https://pr-42-bo.example.com/?prevly_feedback=1",
+		},
 		{App: "audit", Status: model.StatusFailed, LogExcerpt: "npm ERR! boom"},
 	})
 
@@ -25,6 +30,19 @@ func TestRenderStickyComment(t *testing.T) {
 	}
 	if !strings.Contains(body, "live") || !strings.Contains(body, "failed") {
 		t.Fatal("status badges missing")
+	}
+	if !strings.Contains(body, "[open](https://pr-42-bo.example.com) · [💬 feedback](https://pr-42-bo.example.com/?prevly_feedback=1)") {
+		t.Fatalf("feedback link missing or malformed:\n%s", body)
+	}
+}
+
+func TestRenderStickyCommentWithoutFeedback(t *testing.T) {
+	t.Parallel()
+	body := RenderStickyComment([]AppStatus{
+		{App: "bo", Status: model.StatusRunning, URL: "https://pr-42-bo.example.com"},
+	})
+	if strings.Contains(body, "feedback") {
+		t.Fatalf("no feedback link when the URL is empty:\n%s", body)
 	}
 }
 

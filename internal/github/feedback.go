@@ -16,10 +16,11 @@ const stickyMarker = "<!-- prevly -->"
 
 // AppStatus is one app's line in the sticky PR comment.
 type AppStatus struct {
-	App        string
-	Status     model.Status
-	URL        string
-	LogExcerpt string // shown only on failure
+	App         string
+	Status      model.Status
+	URL         string
+	FeedbackURL string // widget activation link; empty hides it
+	LogExcerpt  string // shown only on failure
 }
 
 // RenderStickyComment renders the single prevly PR comment body. Pure so it can
@@ -33,6 +34,9 @@ func RenderStickyComment(apps []AppStatus) string {
 		url := "—"
 		if a.URL != "" {
 			url = "[open](" + a.URL + ")"
+			if a.FeedbackURL != "" {
+				url += " · [💬 feedback](" + a.FeedbackURL + ")"
+			}
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s |\n", a.App, statusBadge(a.Status), url)
 	}
@@ -146,6 +150,16 @@ func (f *APIFeedback) Reply(ctx context.Context, owner, repo string, pr int, bod
 		return fmt.Errorf("post reply: %w", err)
 	}
 	return nil
+}
+
+// PostComment posts a plain PR comment and returns its id and html URL. Used
+// for reviewer feedback, which is one comment per report, never the sticky one.
+func (f *APIFeedback) PostComment(ctx context.Context, owner, repo string, pr int, body string) (int64, string, error) {
+	created, _, err := f.client.Issues.CreateComment(ctx, owner, repo, pr, &gh.IssueComment{Body: &body})
+	if err != nil {
+		return 0, "", fmt.Errorf("post comment: %w", err)
+	}
+	return created.GetID(), created.GetHTMLURL(), nil
 }
 
 // CreateDeployment creates a native Deployment for an app's preview.

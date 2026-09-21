@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rapport d'intervention – KARE (preview)</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 24px;
+        background: #0f172a;
+        color: #fff;
+      }
+      header .brand { font-weight: 700; letter-spacing: .02em; }
+      header nav { display: flex; gap: 14px; margin-left: auto; font-size: 14px; }
+      header nav a { color: #cbd5e1; text-decoration: none; }
+      main { max-width: 980px; margin: 0 auto; padding: 24px; }
+      section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      h2 { font-size: 16px; margin: 0 0 12px; }
+      .muted { color: #64748b; font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+      th { background: #f1f5f9; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #475569; }
+      td.total { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+      .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+      button {
+        font: inherit;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        cursor: pointer;
+      }
+      button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+      button.danger { background: #e11d48; border-color: #e11d48; color: #fff; }
+      figure { margin: 0; }
+      figure img { width: 100%; max-width: 320px; border-radius: 10px; display: block; }
+      figcaption { font-size: 13px; color: #64748b; margin-top: 6px; }
+      .long p { margin: 0 0 14px; line-height: 1.6; }
+      footer { padding: 24px; text-align: center; color: #64748b; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="brand">KARE</span>
+      <span class="muted" style="color:#94a3b8">preview pr-1268-rs</span>
+      <nav>
+        <a href="#rapport">Rapport</a>
+        <a href="#galerie">Galerie</a>
+        <a href="#notes">Notes</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="rapport">
+        <h1>Rapport d'intervention n° 1268</h1>
+        <p class="muted" id="intro">
+          Établissement : Ibis Colmar Centre — contrôle périodique effectué le 21 septembre 2026
+          par l'équipe sécurité incendie. État général : conforme, deux réserves à lever.
+        </p>
+
+        <h2>Détail des prestations</h2>
+        <table id="lignes">
+          <thead>
+            <tr>
+              <th>Référence</th>
+              <th>Désignation</th>
+              <th>Quantité</th>
+              <th>Montant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>EXT-0042</td>
+              <td>Vérification extincteurs à eau pulvérisée</td>
+              <td>12</td>
+              <td class="total">384,00 €</td>
+            </tr>
+            <tr>
+              <td>BAES-0117</td>
+              <td>Contrôle des blocs autonomes d'éclairage de sécurité</td>
+              <td>34</td>
+              <td class="total">612,50 €</td>
+            </tr>
+            <tr>
+              <td>SSI-0003</td>
+              <td>Essai du système de sécurité incendie</td>
+              <td>1</td>
+              <td class="total">237,50 €</td>
+            </tr>
+            <tr>
+              <td colspan="3"><strong>Total à régler</strong></td>
+              <td class="total" id="grand-total">1 234,00 €</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="actions">
+          <button class="primary" id="validate" type="button">Valider le rapport</button>
+          <button type="button" id="export">Exporter en PDF</button>
+          <button class="danger" type="button" id="boom">Déclencher une erreur console</button>
+        </div>
+      </section>
+
+      <section id="galerie">
+        <h2>Galerie</h2>
+        <figure>
+          <img src="/sample.png" alt="Façade de l'établissement" id="photo" />
+          <figcaption>Façade côté rue — clichés pris à l'arrivée de l'équipe.</figcaption>
+        </figure>
+      </section>
+
+      <section id="notes" class="long">
+        <h2>Notes de visite</h2>
+        <p id="accents">
+          Réserve n° 1 : la porte coupe-feu du sous-sol ne se referme pas complètement à cause
+          d'un joint déformé. À remplacer sous quinzaine — dépôt de matériel déjà effectué.
+        </p>
+      </section>
+
+      <footer>Preview générée par prevly — ce contenu est factice.</footer>
+    </main>
+
+    <script>
+      const notes = document.getElementById('notes');
+      for (let i = 2; i <= 24; i += 1) {
+        const p = document.createElement('p');
+        p.textContent =
+          'Observation n° ' + i +
+          ' : cheminement d’évacuation dégagé, signalétique lisible, ' +
+          'registre de sécurité tenu à jour. Aucune anomalie relevée lors du passage.';
+        notes.append(p);
+      }
+      document.getElementById('boom').addEventListener('click', () => {
+        console.warn('Le total affiché ne correspond pas à la somme des lignes');
+        Promise.reject(new Error('demo: rejet non géré'));
+      });
+    </script>
+    <script src="/_prevly/feedback.js" defer></script>
+  </body>
+</html>

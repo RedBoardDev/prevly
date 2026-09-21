@@ -91,6 +91,10 @@ type Preview struct {
 	CommentID      int64 `json:"comment_id"`      // sticky PR comment id
 	InstallationID int64 `json:"installation_id"` // App installation, for loop-driven feedback (sleep/wake/TTL)
 
+	// FeedbackEnabled mirrors the repo's `.prevly.yml` opt-in at deploy time, so
+	// serving a request never has to re-fetch the repo config.
+	FeedbackEnabled bool `json:"feedback_enabled"`
+
 	FailureLog string `json:"failure_log,omitempty"`
 }
 

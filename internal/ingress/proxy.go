@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/caddyserver/certmagic"
@@ -30,12 +31,27 @@ type Proxy struct {
 	// distinct from preview hosts.
 	control http.Handler
 
+	// previewHandler answers previewPrefix paths on preview hosts without
+	// resolving the upstream.
+	previewPrefix  string
+	previewHandler http.Handler
+
+	injector Injector
+
 	rp *httputil.ReverseProxy
 }
 
 // SetControlHandler registers the handler for requests to the base domain
 // (e.g. the GitHub webhook endpoint).
 func (p *Proxy) SetControlHandler(h http.Handler) { p.control = h }
+
+// SetPreviewPathHandler routes requests on preview hosts whose path starts with
+// prefix to h, before resolving (and so without waking) the upstream. The
+// request reaches h unchanged (Host header = preview host).
+func (p *Proxy) SetPreviewPathHandler(prefix string, h http.Handler) {
+	p.previewPrefix = prefix
+	p.previewHandler = h
+}
 
 // NewProxy builds a Proxy. dataDir is where CertMagic stores certificates.
 func NewProxy(resolver Resolver, cfg *config.HostConfig, logger *applog.Logger) *Proxy {
@@ -49,8 +65,9 @@ func NewProxy(resolver Resolver, cfg *config.HostConfig, logger *applog.Logger) 
 		logger:     logger,
 	}
 	p.rp = &httputil.ReverseProxy{
-		Rewrite:      p.rewrite,
-		ErrorHandler: p.proxyError,
+		Rewrite:        p.rewrite,
+		ModifyResponse: p.modifyResponse,
+		ErrorHandler:   p.proxyError,
 	}
 	return p
 }
@@ -69,6 +86,11 @@ func (p *Proxy) rewrite(r *httputil.ProxyRequest) {
 	r.SetURL(&url.URL{Scheme: "http", Host: upstream})
 	r.SetXForwarded()
 	r.Out.Host = r.In.Host
+	// A compressed upstream answer is passed through untouched, so a page that
+	// should carry the injected tag would silently lose it.
+	if p.injector != nil && acceptsHTML(r.In.Header.Get("Accept")) {
+		r.Out.Header.Del("Accept-Encoding")
+	}
 }
 
 func (p *Proxy) proxyError(w http.ResponseWriter, _ *http.Request, err error) {
@@ -81,6 +103,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := hostOnly(r.Host)
 	if host == p.baseDomain && p.control != nil {
 		p.control.ServeHTTP(w, r)
+		return
+	}
+	if host != p.baseDomain && p.previewHandler != nil && strings.HasPrefix(r.URL.Path, p.previewPrefix) {
+		p.previewHandler.ServeHTTP(w, r)
 		return
 	}
 	target, ok, err := p.resolver.Resolve(r.Context(), host)

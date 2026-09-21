@@ -33,7 +33,7 @@ func (f *fakeResolver) Known(string) bool { return f.known }
 
 func newTestProxy(r Resolver) *Proxy {
 	p := &Proxy{resolver: r, logger: applog.New(applog.Options{Level: "error", Out: io.Discard})}
-	p.rp = &httputil.ReverseProxy{Rewrite: p.rewrite, ErrorHandler: p.proxyError}
+	p.rp = &httputil.ReverseProxy{Rewrite: p.rewrite, ModifyResponse: p.modifyResponse, ErrorHandler: p.proxyError}
 	return p
 }
 

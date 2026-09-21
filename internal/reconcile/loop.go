@@ -73,6 +73,9 @@ func (r *Reconciler) Tick(ctx context.Context) {
 	r.reapOrphans(ctx, managed)
 	r.reapOrphanWorkDirs(previews, managed)
 	r.maybePrune(ctx)
+	if r.feedbackTick != nil {
+		r.feedbackTick(ctx)
+	}
 }
 
 // healMissing recreates a preview whose container vanished (e.g. an external

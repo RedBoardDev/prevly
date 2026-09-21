@@ -13,6 +13,7 @@ import (
 
 	"github.com/RedBoardDev/prevly/internal/builder"
 	"github.com/RedBoardDev/prevly/internal/config"
+	"github.com/RedBoardDev/prevly/internal/feedback"
 	"github.com/RedBoardDev/prevly/internal/github"
 	"github.com/RedBoardDev/prevly/internal/ingress"
 	applog "github.com/RedBoardDev/prevly/internal/log"
@@ -133,18 +134,45 @@ func runNormal(ctx context.Context, logger *applog.Logger, cfg *config.HostConfi
 		return err
 	}
 
-	rec := reconcile.New(reconcile.Deps{
+	ghc := reconcile.NewAppGitHub(app)
+
+	var fb *feedback.Service
+	if cfg.Feedback.On() {
+		fb = feedback.New(feedback.Deps{
+			Store:      st,
+			GitHub:     ghc,
+			Config:     cfg.Feedback,
+			BaseDomain: cfg.BaseDomain,
+			DataDir:    cfg.DataDir,
+			Logger:     logger,
+		})
+	}
+
+	deps := reconcile.Deps{
 		Config:  cfg,
 		Store:   st,
 		Builder: builder.New(),
 		Runtime: runtime.New(),
 		Secrets: secrets.New(cfg.Secrets, os.LookupEnv),
-		GitHub:  reconcile.NewAppGitHub(app),
+		GitHub:  ghc,
 		Logger:  logger,
-	})
+	}
+	if fb != nil {
+		deps.OnTeardown = func(repo string, pr int, app string) {
+			if err := fb.OnTeardown(repo, pr, app); err != nil {
+				logger.Warn("delete feedback on teardown", "repo", repo, "pr", pr, "app", app, "err", err)
+			}
+		}
+		deps.FeedbackTick = fb.Tick
+	}
+	rec := reconcile.New(deps)
 
 	proxy := ingress.NewProxy(rec, cfg, logger)
-	proxy.SetControlHandler(controlMux(ctx, creds.WebhookSecret, rec, logger))
+	proxy.SetControlHandler(controlMux(ctx, creds.WebhookSecret, rec, logger, fb))
+	if fb != nil {
+		proxy.SetInjector(fb)
+		proxy.SetPreviewPathHandler("/_prevly/", fb.PreviewHandler())
+	}
 
 	logger.Info("prevly daemon starting", "version", version, "base_domain", cfg.BaseDomain, "app_id", creds.AppID)
 
@@ -173,9 +201,12 @@ func (noopResolver) Resolve(context.Context, string) (ingress.Target, bool, erro
 
 func (noopResolver) Known(string) bool { return false }
 
-func controlMux(ctx context.Context, webhookSecret string, h github.EventHandler, logger *applog.Logger) http.Handler {
+func controlMux(ctx context.Context, webhookSecret string, h github.EventHandler, logger *applog.Logger, fb *feedback.Service) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/webhook", github.NewWebhookHandler(ctx, webhookSecret, h, logger))
+	if fb != nil {
+		mux.Handle("/_prevly/", fb.ControlHandler())
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

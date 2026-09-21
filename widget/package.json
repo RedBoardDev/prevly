@@ -1,0 +1,25 @@
+{
+  "name": "@prevly/feedback-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Preview feedback widget injected by the prevly daemon.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit && vitest run",
+    "dev": "node scripts/build.mjs && node scripts/dev-server.mjs",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@medv/finder": "^4.0.2",
+    "modern-screenshot": "^4.6.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.9",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
