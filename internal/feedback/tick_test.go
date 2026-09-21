@@ -123,7 +123,7 @@ func TestInjectTag(t *testing.T) {
 	optedOut := livePreview()
 	optedOut.PRNumber = 44
 	optedOut.Host = "pr-44-web.preview.example.com"
-	optedOut.FeedbackEnabled = false
+	optedOut.FeedbackEnabled = boolPtr(false)
 
 	f := newFixture(t, defaultConfig(), sleeping, building, optedOut)
 

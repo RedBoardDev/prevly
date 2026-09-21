@@ -99,7 +99,8 @@ func (r *Reconciler) upsertBuilding(ev *gh.PullRequestEvent, repoCfg *config.Rep
 	p.Status = model.StatusBuilding
 	p.TTL = r.ttlFor(repoCfg)
 	p.Idle = r.idleFor(repoCfg)
-	p.FeedbackEnabled = repoCfg.FeedbackOn()
+	feedbackOn := repoCfg.FeedbackOn()
+	p.FeedbackEnabled = &feedbackOn
 	if p.LastSeenAt.IsZero() {
 		p.LastSeenAt = r.now()
 	}

@@ -107,7 +107,7 @@ func liveURL(p *model.Preview) string {
 // feedbackURL returns the widget activation link for a live preview, or "" when
 // feedback is off on the host or in the repo.
 func (r *Reconciler) feedbackURL(p *model.Preview) string {
-	if !r.cfg.Feedback.On() || !p.FeedbackEnabled {
+	if !r.cfg.Feedback.On() || !p.FeedbackOn() {
 		return ""
 	}
 	url := liveURL(p)

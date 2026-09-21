@@ -92,11 +92,18 @@ type Preview struct {
 	InstallationID int64 `json:"installation_id"` // App installation, for loop-driven feedback (sleep/wake/TTL)
 
 	// FeedbackEnabled mirrors the repo's `.prevly.yml` opt-in at deploy time, so
-	// serving a request never has to re-fetch the repo config.
-	FeedbackEnabled bool `json:"feedback_enabled"`
+	// serving a request never has to re-fetch the repo config. Read it through
+	// FeedbackOn: a record written before this field existed decodes to nil, and
+	// a plain bool would read that as opted out, silently killing feedback on
+	// every preview that predates the upgrade.
+	FeedbackEnabled *bool `json:"feedback_enabled,omitempty"`
 
 	FailureLog string `json:"failure_log,omitempty"`
 }
+
+// FeedbackOn reports whether the preview serves the reviewer widget. Unset
+// means on, matching the `.prevly.yml` default.
+func (p *Preview) FeedbackOn() bool { return p.FeedbackEnabled == nil || *p.FeedbackEnabled }
 
 // Key returns the stable identity of the preview ("repo/pr/app"), used as the
 // store key.

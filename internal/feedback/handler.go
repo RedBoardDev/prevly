@@ -184,7 +184,7 @@ func (s *Service) previewFor(r *http.Request) (*model.Preview, bool) {
 	if err != nil || p == nil {
 		return nil, false
 	}
-	if !p.FeedbackEnabled {
+	if !p.FeedbackOn() {
 		return nil, false
 	}
 	return p, true

@@ -75,7 +75,7 @@ func (s *Service) InjectTag(host string) (string, bool) {
 	if err != nil || p == nil {
 		return "", false
 	}
-	if !p.FeedbackEnabled {
+	if !p.FeedbackOn() {
 		return "", false
 	}
 	if p.Status != model.StatusRunning && p.Status != model.StatusSleeping {
