@@ -5,10 +5,10 @@ const BASE = 'http://localhost:4177';
 test('activate, pick a table cell, annotate and submit', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
 
-  await page.goto(`${BASE}/?prevly_feedback=1`);
+  await page.goto(`${BASE}/_prevly/activate`);
 
   await expect(page).toHaveURL(`${BASE}/`);
-  expect(await page.evaluate(() => localStorage.getItem('prevly.feedback'))).toBe('1');
+  expect(await page.evaluate(() => document.cookie)).toContain('prevly_feedback=1');
 
   const launcher = page.locator('[data-prevly="launcher"]');
   await expect(launcher).toBeVisible();
@@ -64,8 +64,14 @@ test('activate, pick a table cell, annotate and submit', async ({ page }) => {
 
 test('stays dormant without the flag', async ({ page }) => {
   await page.goto(BASE);
-  await page.evaluate(() => localStorage.removeItem('prevly.feedback'));
+  await page.context().clearCookies();
   await page.reload();
   await expect(page.locator('prevly-feedback')).toHaveCount(0);
   expect(await page.evaluate(() => typeof window.__prevlyFeedback?.open)).toBe('function');
+});
+
+test('activation survives an app that redirects the entry url', async ({ page }) => {
+  await page.goto(`${BASE}/_prevly/activate?to=/redirect-me`);
+  await expect(page).toHaveURL(`${BASE}/`);
+  await expect(page.locator('[data-prevly="launcher"]')).toBeVisible();
 });

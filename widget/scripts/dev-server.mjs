@@ -135,7 +135,27 @@ const server = createServer(async (req, res) => {
   try {
     if (path === '/health') return json(res, 200, { ok: true });
 
+    // The apps behind a login answer the entry url with a redirect that drops
+    // the query string; this route reproduces that in the mock.
+    if (path === '/redirect-me') {
+      res.writeHead(302, { Location: '/' });
+      return res.end();
+    }
+
     if (path === '/_prevly/feedback.js') return serveFile(res, bundle);
+
+    // Mirrors the daemon: the flag has to survive the app's own redirects, so
+    // it is a cookie the server sets, never a query parameter.
+    if (path === '/_prevly/activate') {
+      const to = url.searchParams.get('to');
+      const target = to && to.startsWith('/') && !to.startsWith('//') ? to : '/';
+      res.writeHead(302, {
+        'Set-Cookie': 'prevly_feedback=1; Path=/; Max-Age=7776000; SameSite=Lax',
+        'Cache-Control': 'no-store',
+        Location: target,
+      });
+      return res.end();
+    }
 
     if (path === '/_prevly/api/feedback') {
       if (req.method === 'GET') {

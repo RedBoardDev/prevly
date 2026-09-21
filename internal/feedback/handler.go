@@ -52,6 +52,7 @@ var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 func (s *Service) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_prevly/feedback.js", s.serveScript)
+	mux.HandleFunc("GET /_prevly/activate", s.activate)
 	mux.HandleFunc("GET /_prevly/api/feedback", s.listReports)
 	mux.HandleFunc("POST /_prevly/api/feedback", s.createReport)
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
@@ -67,6 +68,36 @@ func (s *Service) ControlHandler() http.Handler {
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
 	mux.HandleFunc("/_prevly/", notFound)
 	return mux
+}
+
+// activate turns the widget on for this browser and sends it back to the app.
+// The flag cannot ride on a query parameter: every app in front of a login
+// redirects the entry URL and drops the query before any script runs, so the
+// daemon has to hand the browser something that survives a redirect.
+func (s *Service) activate(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.previewFor(r); !ok {
+		notFound(w, r)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     activationCookie,
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   int(activationTTL.Seconds()),
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, redirectTarget(r.URL.Query().Get("to")), http.StatusFound)
+}
+
+// redirectTarget keeps the browser on the preview: only a same-origin absolute
+// path is honoured, anything else falls back to the app root.
+func redirectTarget(to string) string {
+	if strings.HasPrefix(to, "/") && !strings.HasPrefix(to, "//") && !strings.HasPrefix(to, "/_prevly/") {
+		return to
+	}
+	return "/"
 }
 
 func notFound(w http.ResponseWriter, _ *http.Request) {

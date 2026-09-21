@@ -1,4 +1,4 @@
-import { parseActivationUrl, readFlag, writeFlag } from './activation';
+import { activationCookie, parseActivationUrl, readCookieFlag } from './activation';
 import { createApp } from './app';
 import { startConsoleRecorder } from './console-recorder';
 
@@ -14,7 +14,7 @@ function boot(): void {
 
   const activation = parseActivationUrl(location.href);
   if (activation.requested) {
-    if (storage) writeFlag(storage, true);
+    setActivated(true);
     if (activation.cleanedUrl) {
       try {
         history.replaceState(history.state, '', activation.cleanedUrl);
@@ -29,7 +29,7 @@ function boot(): void {
   window.__prevlyFeedback = {
     open() {
       try {
-        if (storage) writeFlag(storage, true);
+        setActivated(true);
         app.open();
       } catch (error) {
         console.debug('[prevly] feedback open failed', error);
@@ -37,7 +37,7 @@ function boot(): void {
     },
     hide() {
       try {
-        if (storage) writeFlag(storage, false);
+        setActivated(false);
         app.unmount();
       } catch (error) {
         console.debug('[prevly] feedback hide failed', error);
@@ -45,7 +45,7 @@ function boot(): void {
     },
   };
 
-  if (!storage || !readFlag(storage)) return;
+  if (!readCookieFlag(document.cookie)) return;
 
   whenReady(() => {
     try {
@@ -54,6 +54,14 @@ function boot(): void {
       console.debug('[prevly] feedback mount failed', error);
     }
   });
+}
+
+function setActivated(on: boolean): void {
+  try {
+    document.cookie = activationCookie(on);
+  } catch {
+    /* cookies blocked: the widget still works for this page load */
+  }
 }
 
 function whenReady(action: () => void): void {

@@ -114,7 +114,7 @@ func (r *Reconciler) feedbackURL(p *model.Preview) string {
 	if url == "" {
 		return ""
 	}
-	return url + "/?prevly_feedback=1"
+	return url + "/_prevly/activate"
 }
 
 // surfaceCapacityError tells the PR that the host has no preview slot left,

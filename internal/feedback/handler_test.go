@@ -478,3 +478,40 @@ func TestControlHandlerHasNoAPI(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+func TestActivateSetsCookieAndRedirects(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, defaultConfig())
+
+	rec := get(t, f.svc.PreviewHandler(), previewHost, "/_prevly/activate")
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/" {
+		t.Fatalf("Location = %q", got)
+	}
+	var found *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "prevly_feedback" {
+			found = c
+		}
+	}
+	if found == nil || found.Value != "1" || found.Path != "/" || found.MaxAge <= 0 {
+		t.Fatalf("activation cookie = %+v", found)
+	}
+}
+
+func TestActivateRedirectTargetStaysOnTheApp(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{
+		{"/reports/12?tab=costs", "/reports/12?tab=costs"},
+		{"//evil.example.com", "/"},
+		{"https://evil.example.com", "/"},
+		{"/_prevly/activate", "/"},
+		{"", "/"},
+	} {
+		if got := redirectTarget(tc.in); got != tc.want {
+			t.Fatalf("redirectTarget(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
