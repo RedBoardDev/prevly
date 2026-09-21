@@ -1,4 +1,5 @@
 import { LIMITS, clamp } from './limits';
+import { isStableAttr, isStableName } from './stability';
 
 // Only attributes that help locate an element are sent. `value` and friends are
 // deliberately absent: a report must never carry what the reviewer typed.
@@ -45,8 +46,8 @@ export function describeTarget(el: Element, text: string): TargetDescription {
 function usefulAttrs(el: Element): Record<string, string> {
   const out: Record<string, string> = {};
   for (const name of USEFUL_ATTRS) {
-    const value = el.getAttribute(name);
-    if (value) out[name] = clamp(value.trim(), LIMITS.attrValue);
+    const value = el.getAttribute(name)?.trim();
+    if (value && isStableAttr(name, value)) out[name] = clamp(value, LIMITS.attrValue);
   }
   return out;
 }
@@ -56,7 +57,7 @@ function stableClasses(el: Element): string[] {
   return raw
     .trim()
     .split(/\s+/)
-    .filter(Boolean)
+    .filter(isStableName)
     .slice(0, LIMITS.classes)
     .map((name) => clamp(name, LIMITS.attrValue));
 }
