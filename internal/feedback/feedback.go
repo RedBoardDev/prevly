@@ -19,14 +19,6 @@ import (
 // whose repo opted in. The widget stays dormant until activated.
 const scriptTag = `<script src="/_prevly/feedback.js" defer></script>`
 
-// activationCookie is set by /_prevly/activate and read by the widget. It is
-// deliberately readable from JavaScript: the widget clears it when the reviewer
-// hides the widget.
-const activationCookie = "prevly_feedback"
-
-// activationTTL is how long a reviewer stays activated on a preview host.
-const activationTTL = 90 * 24 * time.Hour
-
 // GitHub is the subset of the GitHub App the feedback service needs.
 type GitHub interface {
 	PostComment(ctx context.Context, installationID int64, owner, repo string, pr int, body string) (id int64, url string, err error)

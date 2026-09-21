@@ -29,17 +29,27 @@ export interface Viewport {
   dpr: number;
 }
 
+export interface TargetInfo {
+  tag: string;
+  text: string;
+  xpath?: string | null;
+  attrs?: Record<string, string>;
+  classes?: string[];
+  ancestors?: string[];
+  heading?: string | null;
+}
+
 export interface FeedbackMeta {
   author: string;
   comment: string;
   page: string;
   title?: string;
   selector?: string;
-  element?: ElementInfo;
+  element?: TargetInfo;
   click?: Point;
   rect?: Rect;
   viewport: Viewport;
-  userAgent: string;
+  client: string;
   console: ConsoleEntry[];
 }
 

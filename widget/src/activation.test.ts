@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COOKIE_NAME, activationCookie, parseActivationUrl, readCookieFlag } from './activation';
+import { parseActivationUrl } from './activation';
 
 describe('parseActivationUrl', () => {
   it('ignores a plain url', () => {
@@ -39,21 +39,5 @@ describe('parseActivationUrl', () => {
 
   it('survives a malformed url', () => {
     expect(parseActivationUrl('not a url').requested).toBe(false);
-  });
-});
-
-describe('activation cookie', () => {
-  it('reads the flag the daemon set, whatever else is in the jar', () => {
-    expect(readCookieFlag(`a=b; ${COOKIE_NAME}=1; c=d`)).toBe(true);
-    expect(readCookieFlag(`${COOKIE_NAME}=1`)).toBe(true);
-    expect(readCookieFlag('')).toBe(false);
-    expect(readCookieFlag(`${COOKIE_NAME}=0`)).toBe(false);
-    expect(readCookieFlag(`not_${COOKIE_NAME}=1`)).toBe(false);
-  });
-
-  it('expires the cookie when hiding', () => {
-    expect(activationCookie(true)).toContain('Max-Age=7776000');
-    expect(activationCookie(false)).toContain('Max-Age=0');
-    expect(activationCookie(true)).toContain('SameSite=Lax');
   });
 });

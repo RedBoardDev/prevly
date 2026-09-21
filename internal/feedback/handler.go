@@ -25,14 +25,17 @@ const (
 	maxScreenshotBytes = 3 << 20
 	maxRequestBytes    = maxScreenshotBytes + 2*maxMetaBytes
 
-	maxAuthor    = 80
-	maxComment   = 4000
-	maxPage      = 2048
-	maxTitle     = 200
-	maxSelector  = 500
-	maxElemTag   = 40
-	maxElemText  = 120
-	maxUserAgent = 400
+	maxAuthor   = 80
+	maxComment  = 4000
+	maxPage     = 2048
+	maxTitle    = 200
+	maxSelector = 500
+	maxElemTag  = 40
+	maxElemText = 120
+	maxAttrs    = 16
+	maxAttrLen  = 80
+	maxTrail    = 8
+	maxClient   = 80
 
 	maxConsole        = 20
 	maxConsoleMessage = 500
@@ -52,7 +55,6 @@ var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 func (s *Service) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_prevly/feedback.js", s.serveScript)
-	mux.HandleFunc("GET /_prevly/activate", s.activate)
 	mux.HandleFunc("GET /_prevly/api/feedback", s.listReports)
 	mux.HandleFunc("POST /_prevly/api/feedback", s.createReport)
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
@@ -68,36 +70,6 @@ func (s *Service) ControlHandler() http.Handler {
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
 	mux.HandleFunc("/_prevly/", notFound)
 	return mux
-}
-
-// activate turns the widget on for this browser and sends it back to the app.
-// The flag cannot ride on a query parameter: every app in front of a login
-// redirects the entry URL and drops the query before any script runs, so the
-// daemon has to hand the browser something that survives a redirect.
-func (s *Service) activate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.previewFor(r); !ok {
-		notFound(w, r)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     activationCookie,
-		Value:    "1",
-		Path:     "/",
-		MaxAge:   int(activationTTL.Seconds()),
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, redirectTarget(r.URL.Query().Get("to")), http.StatusFound)
-}
-
-// redirectTarget keeps the browser on the preview: only a same-origin absolute
-// path is honoured, anything else falls back to the app root.
-func redirectTarget(to string) string {
-	if strings.HasPrefix(to, "/") && !strings.HasPrefix(to, "//") && !strings.HasPrefix(to, "/_prevly/") {
-		return to
-	}
-	return "/"
 }
 
 func notFound(w http.ResponseWriter, _ *http.Request) {
@@ -292,17 +264,17 @@ func readPart(part *multipart.Part, limit int) ([]byte, error) {
 
 // meta is the JSON part of a report, as posted by the widget.
 type meta struct {
-	Author    string               `json:"author"`
-	Comment   string               `json:"comment"`
-	Page      string               `json:"page"`
-	Title     string               `json:"title"`
-	Selector  string               `json:"selector"`
-	Element   *model.Element       `json:"element"`
-	Click     *model.Point         `json:"click"`
-	Rect      *model.Rect          `json:"rect"`
-	Viewport  *model.Viewport      `json:"viewport"`
-	UserAgent string               `json:"userAgent"`
-	Console   []model.ConsoleEntry `json:"console"`
+	Author   string               `json:"author"`
+	Comment  string               `json:"comment"`
+	Page     string               `json:"page"`
+	Title    string               `json:"title"`
+	Selector string               `json:"selector"`
+	Element  *model.Element       `json:"element"`
+	Click    *model.Point         `json:"click"`
+	Rect     *model.Rect          `json:"rect"`
+	Viewport *model.Viewport      `json:"viewport"`
+	Client   string               `json:"client"`
+	Console  []model.ConsoleEntry `json:"console"`
 }
 
 func (m *meta) validate() error {
@@ -327,14 +299,11 @@ func (m *meta) validate() error {
 	if err := atMost("selector", m.Selector, maxSelector); err != nil {
 		return err
 	}
-	if err := atMost("userAgent", m.UserAgent, maxUserAgent); err != nil {
+	if err := atMost("client", m.Client, maxClient); err != nil {
 		return err
 	}
 	if m.Element != nil {
-		if err := atMost("element.tag", m.Element.Tag, maxElemTag); err != nil {
-			return err
-		}
-		if err := atMost("element.text", m.Element.Text, maxElemText); err != nil {
+		if err := validateElement(m.Element); err != nil {
 			return err
 		}
 	}
@@ -374,7 +343,7 @@ func (m *meta) record(id string, p *model.Preview, now time.Time, hasScreenshot 
 		Host:           p.Host,
 		InstallationID: p.InstallationID,
 		CommitSHA:      p.CommitSHA,
-		UserAgent:      m.UserAgent,
+		Client:         m.Client,
 		Console:        m.Console,
 		HasScreenshot:  hasScreenshot,
 	}
@@ -384,6 +353,41 @@ func between(field, value string, minLen, maxLen int) error {
 	n := utf8.RuneCountInString(value)
 	if n < minLen || n > maxLen {
 		return fmt.Errorf("%s: must be %d-%d characters", field, minLen, maxLen)
+	}
+	return nil
+}
+
+func validateElement(e *model.Element) error {
+	if err := atMost("element.tag", e.Tag, maxElemTag); err != nil {
+		return err
+	}
+	if err := atMost("element.text", e.Text, maxElemText); err != nil {
+		return err
+	}
+	if err := atMost("element.xpath", e.XPath, maxSelector); err != nil {
+		return err
+	}
+	if err := atMost("element.heading", e.Heading, maxElemText); err != nil {
+		return err
+	}
+	if len(e.Attrs) > maxAttrs {
+		return fmt.Errorf("element.attrs: at most %d entries", maxAttrs)
+	}
+	for name, value := range e.Attrs {
+		if err := atMost("element.attrs."+name, value, maxAttrLen); err != nil {
+			return err
+		}
+	}
+	if len(e.Classes) > maxTrail {
+		return fmt.Errorf("element.classes: at most %d entries", maxTrail)
+	}
+	if len(e.Ancestors) > maxTrail {
+		return fmt.Errorf("element.ancestors: at most %d entries", maxTrail)
+	}
+	for _, v := range append(append([]string{}, e.Classes...), e.Ancestors...) {
+		if err := atMost("element.trail", v, maxAttrLen); err != nil {
+			return err
+		}
 	}
 	return nil
 }
