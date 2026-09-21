@@ -1,4 +1,4 @@
-import { AUTHOR_KEY, writeFlag } from './activation';
+import { AUTHOR_KEY, activationCookie } from './activation';
 import { createApi } from './api';
 import type { FeedbackApi } from './api';
 import type { ConsoleRecorder } from './console-recorder';
@@ -162,7 +162,11 @@ export function createApp(deps: AppDeps): App {
         visible ? 'shown' : 'hidden',
       ),
       item('Hide widget', 'Hide the feedback widget on this browser', () => {
-        writeFlag(storage ?? memoryStorage(), false);
+        try {
+          document.cookie = activationCookie(false);
+        } catch {
+          /* cookies blocked: hiding still takes effect for this page load */
+        }
         unmount();
       }),
     );
@@ -372,16 +376,3 @@ function safeStorage(): Storage | null {
   }
 }
 
-function memoryStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    get length() {
-      return map.size;
-    },
-    clear: () => map.clear(),
-    getItem: (key: string) => map.get(key) ?? null,
-    key: (index: number) => Array.from(map.keys())[index] ?? null,
-    removeItem: (key: string) => void map.delete(key),
-    setItem: (key: string, value: string) => void map.set(key, value),
-  } as Storage;
-}

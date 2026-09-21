@@ -86,7 +86,7 @@ func TestFeedbackURL(t *testing.T) {
 		Status: model.StatusRunning, URL: "https://pr-42-web.preview.example.com",
 		FeedbackEnabled: boolPtr(true),
 	}
-	if got := rec.feedbackURL(live); got != "https://pr-42-web.preview.example.com/?prevly_feedback=1" {
+	if got := rec.feedbackURL(live); got != "https://pr-42-web.preview.example.com/_prevly/activate" {
 		t.Fatalf("feedbackURL = %q", got)
 	}
 

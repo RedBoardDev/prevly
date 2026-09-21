@@ -17,10 +17,17 @@ GitHub  ── GET  https://<base>/_prevly/feedback/<id>/screenshot.png (camo fe
 ```
 
 The widget stays dormant until activated once per browser: the sticky PR
-comment links to `<preview-url>/?prevly_feedback=1`; the script stores the flag
-in `localStorage` (`prevly.feedback`) and strips the query. Without the flag
-the script injects nothing into the DOM. `#prevly-feedback` in the hash works
-too. The widget menu has "Hide" which clears the flag.
+comment links to `<preview-url>/_prevly/activate`, which sets the cookie
+`prevly_feedback=1` (path `/`, 90 days, `SameSite=Lax`, readable from
+JavaScript) and redirects to `/`, or to `?to=<absolute path>` when given one.
+Without that cookie the script injects nothing into the DOM. The widget menu
+has "Hide", which expires the cookie.
+
+The flag cannot ride on a query parameter: every app sitting behind a login
+answers the entry URL with a redirect that drops the query string before any
+script of ours runs, so a `?prevly_feedback=1` link never activates anything.
+The query form is still honoured for local development, where the mock does
+not redirect.
 
 ## Routing on a preview host
 
@@ -29,6 +36,7 @@ never reaches the container. It does not wake a sleeping preview.
 
 | Method | Path | Answer |
 |---|---|---|
+| GET | `/_prevly/activate` | `302` to `to` (an absolute same-origin path) or `/`, with the activation cookie |
 | GET | `/_prevly/feedback.js` | the widget bundle, `application/javascript`, `Cache-Control: no-cache` |
 | GET | `/_prevly/api/feedback` | `200 {"items":[Feedback…]}` for this host, newest first, no binary |
 | POST | `/_prevly/api/feedback` | multipart, see below. `201 {"item":Feedback}` |
@@ -127,7 +135,7 @@ Reported by Thomas · viewport 1440×900 @2x · commit `abc1234` · <userAgent, 
 ```
 
 The sticky comment gains a feedback link per live app:
-`| kare | 🟢 live | [open](url) · [💬 feedback](url/?prevly_feedback=1) |`.
+`| kare | 🟢 live | [open](url) · [💬 feedback](url/_prevly/activate) |`.
 
 ## Storage
 
@@ -137,6 +145,10 @@ value (the full
 record incl. userAgent/console, plus `comment_id`, `installation_id`, `host`,
 `commit_sha`, `screenshot` bool). Screenshots on disk:
 `<data_dir>/feedback/<id>.png`.
+
+`Preview.feedback_enabled` is a nullable bool read through `FeedbackOn()`:
+unset means on, matching the `.prevly.yml` default, so a preview stored before
+the field existed keeps serving the widget.
 
 Teardown of a preview deletes its feedback records; screenshot files stay
 until `feedback.retention` (default `90d`) elapses, swept by the reconcile

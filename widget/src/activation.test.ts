@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FLAG_KEY, parseActivationUrl, readFlag, writeFlag } from './activation';
+import { COOKIE_NAME, activationCookie, parseActivationUrl, readCookieFlag } from './activation';
 
 describe('parseActivationUrl', () => {
   it('ignores a plain url', () => {
@@ -42,30 +42,18 @@ describe('parseActivationUrl', () => {
   });
 });
 
-describe('flag storage', () => {
-  it('round-trips through localStorage', () => {
-    localStorage.clear();
-    expect(readFlag(localStorage)).toBe(false);
-    writeFlag(localStorage, true);
-    expect(localStorage.getItem(FLAG_KEY)).toBe('1');
-    expect(readFlag(localStorage)).toBe(true);
-    writeFlag(localStorage, false);
-    expect(readFlag(localStorage)).toBe(false);
+describe('activation cookie', () => {
+  it('reads the flag the daemon set, whatever else is in the jar', () => {
+    expect(readCookieFlag(`a=b; ${COOKIE_NAME}=1; c=d`)).toBe(true);
+    expect(readCookieFlag(`${COOKIE_NAME}=1`)).toBe(true);
+    expect(readCookieFlag('')).toBe(false);
+    expect(readCookieFlag(`${COOKIE_NAME}=0`)).toBe(false);
+    expect(readCookieFlag(`not_${COOKIE_NAME}=1`)).toBe(false);
   });
 
-  it('never throws when storage is blocked', () => {
-    const blocked = {
-      getItem() {
-        throw new Error('blocked');
-      },
-      setItem() {
-        throw new Error('blocked');
-      },
-      removeItem() {
-        throw new Error('blocked');
-      },
-    };
-    expect(readFlag(blocked)).toBe(false);
-    expect(() => writeFlag(blocked, true)).not.toThrow();
+  it('expires the cookie when hiding', () => {
+    expect(activationCookie(true)).toContain('Max-Age=7776000');
+    expect(activationCookie(false)).toContain('Max-Age=0');
+    expect(activationCookie(true)).toContain('SameSite=Lax');
   });
 });
