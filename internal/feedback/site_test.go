@@ -139,6 +139,9 @@ func TestSiteReportCreatesIssueWithLabelsAndType(t *testing.T) {
 	if stored.Site != "staging" || stored.IssueNumber == 0 || stored.IssueURL == "" {
 		t.Fatalf("record not posted: %+v", stored)
 	}
+	if item["comment_url"] != stored.IssueURL {
+		t.Fatalf("comment_url = %v, want the created issue's URL %q so the reviewer gets a link to what they filed", item["comment_url"], stored.IssueURL)
+	}
 
 	if fg.issueCount() != 1 {
 		t.Fatalf("issues created = %d, want 1", fg.issueCount())
@@ -209,8 +212,8 @@ func TestSiteReportLogsSilentlyDroppedLabelsAndType(t *testing.T) {
 	}
 
 	item := decodeItem(t, rec.Body.Bytes())
-	if item["comment_url"] != nil {
-		t.Fatal("site reports have no comment_url")
+	if item["comment_url"] != "https://github.com/acme/shop/issues/3" {
+		t.Fatalf("comment_url = %v, want the issue's URL even when some of its labels/type were dropped", item["comment_url"])
 	}
 }
 

@@ -171,7 +171,6 @@ export interface MountOptions {
   context?: Record<string, string>;
   labels?: Partial<Labels>;
   position?: Corner;
-  shortcut?: string;
   network?: NetworkOptions;
   theme?: Theme;
   types?: TypeOption[];
@@ -183,7 +182,6 @@ export interface ResolvedOptions {
   context: Record<string, string>;
   labels: Labels;
   position: Corner;
-  shortcut: string;
   origins: string[];
   requestIdHeader: string;
   theme: Theme;
@@ -204,10 +202,9 @@ export function resolveOptions(input: MountOptions): ResolvedOptions {
     position: CORNERS.includes(input?.position as Corner)
       ? (input.position as Corner)
       : 'bottom-right',
-    shortcut: shortcutOf(input?.shortcut),
     origins: originsOf(input?.network?.origins),
     requestIdHeader: requestIdHeaderOf(input?.network?.requestIdHeader),
-    theme: input?.theme === 'light' || input?.theme === 'dark' ? input.theme : 'auto',
+    theme: input?.theme === 'auto' || input?.theme === 'dark' ? input.theme : 'light',
     types: typesOf(input?.types, labels),
   };
 }
@@ -263,11 +260,6 @@ function cleanLabels(labels: Partial<Labels> | undefined): Partial<Labels> {
     if (typeof value === 'string' && value) out[key as keyof Labels] = value;
   }
   return out;
-}
-
-function shortcutOf(shortcut: string | undefined): string {
-  const key = typeof shortcut === 'string' ? shortcut.trim() : '';
-  return key.length === 1 ? key.toLowerCase() : 'f';
 }
 
 function requestIdHeaderOf(header: string | undefined): string {

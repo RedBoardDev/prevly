@@ -52,7 +52,6 @@ export function createApp(deps: AppDeps): App {
   const labels = options.labels;
   const api = deps.api ?? createApi({ path: options.endpoint });
   const topLayer = supportsTopLayer();
-  const saved = storage.readBadge();
 
   let host: HTMLElement | null = null;
   let root: HTMLElement | null = null;
@@ -65,8 +64,10 @@ export function createApp(deps: AppDeps): App {
   let panel: Panel | null = null;
   let media: MediaQueryList | null = null;
   let toastTimer = 0;
-  let corner: Corner = saved.corner ?? options.position;
-  let closed = saved.closed;
+  let corner: Corner = storage.readCorner() ?? options.position;
+  // Closing lives only for the current page: a reload always brings the
+  // badge back, so nothing is persisted here.
+  let closed = false;
   let locked = false;
 
   function mount(): void {
@@ -104,7 +105,7 @@ export function createApp(deps: AppDeps): App {
       onClose: () => closeBadge(),
       onCorner: (next) => {
         corner = next;
-        storage.writeBadge({ corner, closed });
+        storage.writeCorner(corner);
       },
     });
     if (!closed) badge.surface.show();
@@ -169,14 +170,12 @@ export function createApp(deps: AppDeps): App {
 
   function closeBadge(): void {
     closed = true;
-    storage.writeBadge({ corner, closed });
     badge?.surface.hide();
   }
 
   function revealBadge(): void {
     if (!closed) return;
     closed = false;
-    storage.writeBadge({ corner, closed });
     badge?.surface.show();
   }
 
@@ -321,13 +320,6 @@ export function createApp(deps: AppDeps): App {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (isShortcut(event)) {
-      event.preventDefault();
-      event.stopPropagation();
-      revealBadge();
-      openPageReport();
-      return;
-    }
     if (event.key !== 'Escape') return;
     if (panel) {
       closePanel();
@@ -339,12 +331,6 @@ export function createApp(deps: AppDeps): App {
     }
     event.preventDefault();
     event.stopPropagation();
-  }
-
-  function isShortcut(event: KeyboardEvent): boolean {
-    if (event.altKey || event.shiftKey) return false;
-    if (!event.metaKey && !event.ctrlKey) return false;
-    return event.key.toLowerCase() === options.shortcut;
   }
 
   return {

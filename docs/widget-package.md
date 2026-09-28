@@ -34,14 +34,13 @@ widget.unmount();
 | `context` | `{}` | Opaque key/value pairs echoed back in the payload. The host uses it for whatever its server needs. Values are strings, at most 10 keys, each ≤ 200 characters. |
 | `labels` | English, or French on a page tagged `fr`/`fr-*` | Every visible string, so the host can translate. Picked automatically from `document.documentElement.lang` (anything else falls back to English); an explicit key here still overrides the picked locale. |
 | `position` | `'bottom-right'` | Starting corner. The reviewer can drag it elsewhere and that wins. |
-| `shortcut` | `'f'` | Pressed with the platform modifier, starts a report. It also brings the badge back after it was closed. |
 | `network` | `{ origins: [] }` | Origins whose failed requests are captured. Empty means the page's own origin. `network.requestIdHeader` (default `'x-request-id'`) is the response header read into the payload's `requestId` field — `x-request-id` is one API's convention, not a standard, so a host using `x-correlation-id` or `traceparent` sets this instead. The payload field stays named `requestId` regardless. |
-| `theme` | `'auto'` | `auto`, `light` or `dark`. |
+| `theme` | `'light'` | `'light'`, `'dark'` or `'auto'` (follows the OS). |
 | `types` | the three below | `Array<{ id, label }>`, 1 to 8 entries, `id` unique and matching `^[a-z0-9][a-z0-9-]{0,31}$`. Renders the panel's type selector, first entry preselected. An invalid list (bad id, empty label, duplicate, too many/none) falls back to the default instead of throwing: `bug`/`Bug`, `design`/`Design`, `question`/`Question`. |
 
 `mountFeedback` never throws and never returns null: a browser that cannot
 support it gets an inert handle. The handle also carries `open()`, which
-reveals the badge and opens the panel, the same thing the shortcut does.
+reveals the badge (even after it was closed) and opens the panel.
 
 ## Loading as a script
 
@@ -82,8 +81,10 @@ cover.
 - "Point at something": the cursor becomes a crosshair, the hovered element is
   outlined, a click captures it and opens the same panel with a screenshot to
   draw on.
-- A cross closes the badge. The shortcut brings it back. The choice is
-  remembered per host in `localStorage`.
+- A cross closes the badge for the current page only; nothing is
+  remembered, so a reload always brings it back. There is no keyboard
+  shortcut — the widget never intercepts a key combination, including the
+  browser's own Ctrl/Cmd+F.
 - Dragging the badge moves it; the corner is remembered per host.
 - Existing reports whose element is still on the page show as numbered pins.
 

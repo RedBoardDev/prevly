@@ -146,7 +146,7 @@ test('the badge stays on top of a host overlay at the maximum z-index', async ({
   await expect(page.locator(panel)).toBeVisible();
 });
 
-test('the cross closes the badge and the shortcut brings it back into a report', async ({ page }) => {
+test('the cross closes the badge for this page only; a reload brings it back', async ({ page }) => {
   await activated(page);
   await expect(page.locator(badge)).toBeVisible();
 
@@ -154,15 +154,29 @@ test('the cross closes the badge and the shortcut brings it back into a report',
   await expect(page.locator(badge)).toBeHidden();
 
   await page.reload();
-  await expect(page.locator(badge)).toBeHidden();
+  await expect(page.locator(badge)).toBeVisible();
+});
+
+test('Ctrl/Cmd+F is never intercepted', async ({ page }) => {
+  await activated(page);
+  await expect(page.locator(badge)).toBeVisible();
+
+  await page.evaluate(() => {
+    (window as unknown as { __prevented: boolean | null }).__prevented = null;
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        (window as unknown as { __prevented: boolean | null }).__prevented = event.defaultPrevented;
+      },
+      { once: true },
+    );
+  });
 
   await page.keyboard.press('ControlOrMeta+f');
-  await expect(page.locator(badge)).toBeVisible();
-  await expect(page.locator(panel)).toBeVisible();
 
-  await page.keyboard.press('Escape');
-  await page.reload();
-  await expect(page.locator(badge)).toBeVisible();
+  const prevented = await page.evaluate(() => (window as unknown as { __prevented: boolean | null }).__prevented);
+  expect(prevented).toBe(false);
+  await expect(page.locator(panel)).toHaveCount(0);
 });
 
 test('the badge can be dragged to another corner and stays there', async ({ page }) => {
