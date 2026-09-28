@@ -1,7 +1,7 @@
 # Example prevly host config. Install at /etc/prevly/config.yaml (mode 600).
 # Secrets and tokens are NEVER inline here — they come from the host environment.
 
-base_domain: preview.staging.kare-app.fr   # previews at pr-<N>[-<app>].<base_domain>
+base_domain: preview.staging.example.com   # previews at pr-<N>[-<app>].<base_domain>
 
 tls:
   mode: dns-01                     # dns-01 | on-demand | external

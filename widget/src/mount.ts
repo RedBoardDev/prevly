@@ -50,6 +50,7 @@ export function mountFeedback(options: MountOptions): FeedbackWidget {
     startRecorders();
     const started = recorders as Recorders;
     started.network.setOrigins(resolved.origins);
+    started.network.setRequestIdHeader(resolved.requestIdHeader);
 
     const app = createApp({
       options: resolved,

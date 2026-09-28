@@ -11,6 +11,13 @@ function response(status: number, requestId?: string): Response {
   } as unknown as Response;
 }
 
+function responseWithHeader(status: number, headerName: string, value: string): Response {
+  return {
+    status,
+    headers: { get: (name: string) => (name === headerName ? value : null) },
+  } as unknown as Response;
+}
+
 function recorderOn(fetchImpl: typeof fetch, origins = ['https://app.example.com']) {
   const target: NetworkTarget = { fetch: fetchImpl };
   const recorder = startNetworkRecorder({
@@ -36,6 +43,40 @@ describe('network capture', () => {
         at: '2026-09-28T09:12:33.000Z',
       },
     ]);
+  });
+
+  it('reads the request id from a configured header instead of x-request-id', async () => {
+    const target: NetworkTarget = {
+      fetch: vi.fn(async () => responseWithHeader(500, 'x-correlation-id', 'corr-42')) as unknown as typeof fetch,
+    };
+    const recorder = startNetworkRecorder({
+      target,
+      origins: ['https://app.example.com'],
+      base: BASE,
+      now: () => new Date('2026-09-28T09:12:33.000Z'),
+      requestIdHeader: 'x-correlation-id',
+    });
+
+    await target.fetch?.('/api/save');
+    expect(recorder.entries()).toEqual([
+      { method: 'GET', path: '/api/save', status: 500, requestId: 'corr-42', at: '2026-09-28T09:12:33.000Z' },
+    ]);
+  });
+
+  it('setRequestIdHeader switches which header is read', async () => {
+    const target: NetworkTarget = {
+      fetch: vi.fn(async () => responseWithHeader(500, 'traceparent', 'trace-1')) as unknown as typeof fetch,
+    };
+    const recorder = startNetworkRecorder({
+      target,
+      origins: ['https://app.example.com'],
+      base: BASE,
+      now: () => new Date('2026-09-28T09:12:33.000Z'),
+    });
+    recorder.setRequestIdHeader('traceparent');
+
+    await target.fetch?.('/api/save');
+    expect(recorder.entries()[0]?.requestId).toBe('trace-1');
   });
 
   it('ignores a 404 and a 401', async () => {
@@ -75,6 +116,28 @@ describe('network capture', () => {
     expect(recorder.entries()).toEqual([
       { method: 'GET', path: '/api/save', status: 0, at: '2026-09-28T09:12:33.000Z' },
     ]);
+  });
+
+  it('drops an app-initiated abort instead of recording it as a failure', async () => {
+    const boom = vi.fn(async () => {
+      throw new DOMException('The user aborted a request.', 'AbortError');
+    });
+    const { recorder, target } = recorderOn(boom as unknown as typeof fetch);
+
+    await expect(target.fetch?.('/api/save')).rejects.toThrow('The user aborted a request.');
+    expect(recorder.entries()).toEqual([]);
+  });
+
+  it('drops a plain Error named AbortError too', async () => {
+    const boom = vi.fn(async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    });
+    const { recorder, target } = recorderOn(boom as unknown as typeof fetch);
+
+    await expect(target.fetch?.('/api/save')).rejects.toThrow('aborted');
+    expect(recorder.entries()).toEqual([]);
   });
 
   it('caps the buffer at five entries, keeping the newest', async () => {
@@ -160,6 +223,41 @@ describe('network capture', () => {
         at: '2026-09-28T09:12:33.000Z',
       },
     ]);
+    recorder.stop();
+  });
+
+  it('does not listen for the XHR abort event, so an app-cancelled request records nothing', () => {
+    const listeners = new Map<string, Array<() => void>>();
+    class FakeXHR {
+      status = 0;
+      open(_method: string, _url: string): void {
+        /* patched */
+      }
+      send(): void {
+        /* patched */
+      }
+      addEventListener(type: string, listener: () => void): void {
+        const bucket = listeners.get(type) ?? [];
+        bucket.push(listener);
+        listeners.set(type, bucket);
+      }
+      getResponseHeader(): string | null {
+        return null;
+      }
+    }
+    const target: NetworkTarget = { XMLHttpRequest: FakeXHR as unknown as typeof XMLHttpRequest };
+    const recorder = startNetworkRecorder({
+      target,
+      origins: ['https://app.example.com'],
+      base: BASE,
+      now: () => new Date('2026-09-28T09:12:33.000Z'),
+    });
+
+    const xhr = new FakeXHR();
+    xhr.open('GET', '/api/save');
+    xhr.send();
+
+    expect(listeners.has('abort')).toBe(false);
     recorder.stop();
   });
 });

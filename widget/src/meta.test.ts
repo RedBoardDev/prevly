@@ -15,7 +15,7 @@ describe('buildMeta', () => {
   it('keeps the contract shape', () => {
     const meta = buildMeta({
       ...base,
-      title: 'Report – KARE',
+      title: 'Report – Acme Shop',
       selector: 'main > table td.total',
       element: { tag: 'TD', text: '  1 234,00 €\n' },
       click: { x: 812.6, y: 403.2 },
@@ -29,7 +29,7 @@ describe('buildMeta', () => {
       author: 'Thomas',
       comment: 'The total is wrong',
       page: '/reports/123?tab=costs',
-      title: 'Report – KARE',
+      title: 'Report – Acme Shop',
       selector: 'main > table td.total',
       element: { tag: 'td', text: '1 234,00 €' },
       click: { x: 813, y: 403 },
@@ -96,7 +96,7 @@ describe('a page-level report', () => {
     const meta = buildMeta({
       ...base,
       type: 'question',
-      title: 'Report – KARE',
+      title: 'Report – Acme Shop',
       selector: null,
       element: null,
       click: null,
@@ -110,7 +110,7 @@ describe('a page-level report', () => {
       author: 'Thomas',
       comment: 'The total is wrong',
       page: '/reports/123?tab=costs',
-      title: 'Report – KARE',
+      title: 'Report – Acme Shop',
       viewport: { w: 1440, h: 901, dpr: 2 },
       client: 'Chrome 152 on macOS',
       console: [],

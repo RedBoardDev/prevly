@@ -19,7 +19,7 @@ func TestLoadMissingIsNotAnError(t *testing.T) {
 func TestSaveLoadRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	want := Credentials{AppID: 4242, WebhookSecret: "s3cr3t", Slug: "prevly-kare"}
+	want := Credentials{AppID: 4242, WebhookSecret: "s3cr3t", Slug: "prevly-shop"}
 	key := []byte("-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n")
 
 	if err := Save(dir, want, key); err != nil {

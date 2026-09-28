@@ -18,7 +18,7 @@ apps:
     subdomain: bo                  # -> pr-<N>-bo.<base_domain>
     port: 3000
     build_args:
-      NEXT_PUBLIC_API_URL: https://api.bo.staging.kare-app.fr
+      NEXT_PUBLIC_API_URL: https://api.bo.staging.example.com
     env:
       NODE_ENV: production
     secrets:
@@ -32,7 +32,7 @@ apps:
     subdomain: audit
     port: 3000
     build_args:
-      NEXT_PUBLIC_API_URL: https://api.ad.staging.kare-app.fr
+      NEXT_PUBLIC_API_URL: https://api.ad.staging.example.com
 
 ttl: 30d
 idle: 6h

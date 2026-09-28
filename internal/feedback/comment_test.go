@@ -11,21 +11,21 @@ import (
 func sampleRecord() *model.Feedback {
 	return &model.Feedback{
 		ID:       "01J8ABCDEFGHJKMNPQRSTVWXYZ",
-		Repo:     "akord-securite/KARE",
+		Repo:     "acme/shop",
 		PRNumber: 1268,
-		AppName:  "kare",
+		AppName:  "web",
 		Type:     "bug",
-		Page:     "/reports/123?tab=costs",
+		Page:     "/cart/123?promo=save10",
 		Author:   "Thomas",
 		Comment:  "The total is wrong",
 		Selector: "main > table tr:nth-child(3) td.total",
 		Element: &model.Element{
-			Tag: "td", Text: "1 234,00 €",
+			Tag: "td", Text: "$1,234.00",
 			XPath:     "/html/body/main/table/tbody/tr[3]/td[4]",
 			Attrs:     map[string]string{"id": "grand-total", "data-testid": "total"},
 			Classes:   []string{"total", "num"},
-			Ancestors: []string{"main#report", "table.prestations", "tbody", "tr"},
-			Heading:   "Détail des prestations",
+			Ancestors: []string{"main#cart", "table.line-items", "tbody", "tr"},
+			Heading:   "Order summary",
 		},
 		Click:     &model.Point{X: 812, Y: 403},
 		Viewport:  &model.Viewport{W: 1440, H: 900, DPR: 2},
@@ -34,8 +34,8 @@ func sampleRecord() *model.Feedback {
 		Client:    "Chrome 130 on macOS",
 		Context:   map[string]string{"stage": "staging", "release": "2026.09.4"},
 		Network: []model.NetworkEntry{
-			{Method: "GET", Path: "/rs/v1/reports/123", Status: 500, RequestID: "req-9f2c", At: "2026-09-21T10:12:33Z"},
-			{Method: "POST", Path: "/rs/v1/reports", Status: 0, At: "2026-09-21T10:12:35Z"},
+			{Method: "GET", Path: "/api/v1/cart/123", Status: 500, RequestID: "req-9f2c", At: "2026-09-21T10:12:33Z"},
+			{Method: "POST", Path: "/api/v1/cart", Status: 0, At: "2026-09-21T10:12:35Z"},
 		},
 		Console: []model.ConsoleEntry{
 			{Level: "error", Message: "TypeError: boom", At: "2026-09-21T10:12:33Z"},
@@ -47,25 +47,25 @@ func sampleRecord() *model.Feedback {
 
 func TestRenderComment(t *testing.T) {
 	t.Parallel()
-	body := RenderComment(sampleRecord(), "preview.example.com", "https://pr-1268-kare.preview.example.com")
+	body := RenderComment(sampleRecord(), "preview.example.com", "https://pr-1268-web.preview.example.com")
 
 	want := []string{
 		"<!-- prevly-feedback:01J8ABCDEFGHJKMNPQRSTVWXYZ -->",
-		"### 🐞 Bug · Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-kare.preview.example.com/reports/123?tab=costs>)",
+		"### 🐞 Bug · Thomas · `web` · [/cart/123?promo=save10](<https://pr-1268-web.preview.example.com/cart/123?promo=save10>)",
 		"> The total is wrong",
 		"<details><summary>Screenshot</summary>",
 		"![screenshot](https://preview.example.com/_prevly/feedback/01J8ABCDEFGHJKMNPQRSTVWXYZ/screenshot.png)",
 		"<details><summary>Where exactly</summary>",
-		"| URL | <https://pr-1268-kare.preview.example.com/reports/123?tab=costs> |",
+		"| URL | <https://pr-1268-web.preview.example.com/cart/123?promo=save10> |",
 		"| release | `2026.09.4` |",
 		"| stage | `staging` |",
-		"| Section | Détail des prestations |",
+		"| Section | Order summary |",
 		"| CSS selector | `main > table tr:nth-child(3) td.total` |",
 		"| Element | `<td>` |",
-		`| Element text | "1 234,00 €" |`,
+		`| Element text | "$1,234.00" |`,
 		"| Attributes | `data-testid=\"total\"` `id=\"grand-total\"` |",
 		"| Classes | `.total.num` |",
-		"| Ancestors | `main#report > table.prestations > tbody > tr` |",
+		"| Ancestors | `main#cart > table.line-items > tbody > tr` |",
 		"| XPath | `/html/body/main/table/tbody/tr[3]/td[4]` |",
 		"| Clicked at | x 812, y 403 in the viewport |",
 		"| Viewport | 1440×900 @2x |",
@@ -75,8 +75,8 @@ func TestRenderComment(t *testing.T) {
 		"<details><summary>Console (2 errors)</summary>",
 		"2026-09-21T10:12:33Z error TypeError: boom",
 		"<details><summary>Network (2 failed requests)</summary>",
-		"2026-09-21T10:12:33Z GET /rs/v1/reports/123 500 x-request-id=req-9f2c",
-		"2026-09-21T10:12:35Z POST /rs/v1/reports no response",
+		"2026-09-21T10:12:33Z GET /api/v1/cart/123 500 x-request-id=req-9f2c",
+		"2026-09-21T10:12:35Z POST /api/v1/cart no response",
 	}
 	for _, w := range want {
 		if !strings.Contains(body, w) {
@@ -92,7 +92,7 @@ func TestRenderComment(t *testing.T) {
 // stays readable.
 func TestRenderCommentFoldsEverythingButTheWords(t *testing.T) {
 	t.Parallel()
-	body := RenderComment(sampleRecord(), "preview.example.com", "https://pr-1268-kare.preview.example.com")
+	body := RenderComment(sampleRecord(), "preview.example.com", "https://pr-1268-web.preview.example.com")
 
 	visible, _, found := strings.Cut(body, "<details>")
 	if !found {

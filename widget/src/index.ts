@@ -9,5 +9,6 @@ export type {
   Reporter,
   ReportType,
   Theme,
+  TypeOption,
 } from './options';
 export type { FeedbackItem, FeedbackMeta, NetworkEntry } from './types';

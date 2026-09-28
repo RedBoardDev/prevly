@@ -8,38 +8,85 @@ the script talks to the daemon on the same origin.
 ## Flow
 
 ```
-browser ── GET https://pr-42-rs.<base>/reports ──▶ proxy ──▶ container
+browser ── GET https://pr-42-web.<base>/cart ──▶ proxy ──▶ container
         ◀── HTML + <script src="/_prevly/feedback.js" defer> ◀──┘   (injected)
-browser ── GET  /_prevly/feedback.js          ──▶ daemon (embedded asset)
-browser ── GET  /_prevly/api/feedback         ──▶ daemon: pins for this host
-browser ── POST /_prevly/api/feedback         ──▶ daemon: store + PR comment
-GitHub  ── GET  https://<base>/_prevly/feedback/<id>/screenshot.png (camo fetch)
+browser ── GET  /_prevly/feedback.js          ──▶ daemon (embedded asset, public)
+browser ── GET  /_prevly/activate?t=<token>   ──▶ daemon: sets the feedback cookie
+browser ── GET  /_prevly/api/feedback         ──▶ daemon: pins for this host (cookie required)
+browser ── POST /_prevly/api/feedback         ──▶ daemon: store + PR comment (cookie required)
+GitHub  ── GET  https://<base>/_prevly/feedback/<id>/screenshot.png (camo fetch, public)
 ```
 
-The widget is on wherever the daemon injects it. There is no activation step:
-`feedback.enabled` on the host and `feedback` in `.prevly.yml` are the only
-switches. The badge carries a cross that closes it; the choice is remembered
-per host in `localStorage` and `Ctrl`/`Cmd` + `F` brings it back, straight into
-a report.
+The widget is on wherever the daemon injects it, on every preview, because
+previews are public: anyone who guesses a preview URL can otherwise post to
+the pull request's comments, with any `author` they like, and read every
+report's author and comment. Reading and writing feedback is gated by a
+per-preview secret instead: `feedback.enabled` on the host and `feedback` in
+`.prevly.yml` still switch injection off entirely, but a repo that has
+feedback on still requires the activation link.
+
+**Activation.** `model.Preview.FeedbackToken` is 32 random bytes
+(`crypto/rand`, base64url, no padding), generated once at deploy and kept
+stable across redeploys — the link already posted to the pull request keeps
+working. The sticky comment's app row carries it next to `[open](url)`:
+`[send feedback](<preview-url>/_prevly/activate?t=<token>)`. Visiting it
+compares `t` to the preview's token in constant time
+(`crypto/subtle.ConstantTimeCompare`) and, on a match, sets
+
+```
+Set-Cookie: prevly_feedback=<token>; Path=/_prevly/; HttpOnly; Secure; SameSite=Strict; Max-Age=<preview TTL or 30d>
+```
+
+then 302s to `/`. `Path=/_prevly/` is deliberate: the previewed application
+never receives the cookie, and `HttpOnly` keeps its scripts from reading it. A
+wrong or missing token, or an unknown host, all answer `404`, identical to any
+other unknown `/_prevly/` path — the endpoint never reveals which case it was.
+The token itself is never logged, not even truncated.
+
+`GET`/`POST /_prevly/api/feedback` require that cookie, compared the same
+constant-time way; missing or wrong answers `401` with a JSON error. Nothing
+else changes: `GET /_prevly/feedback.js` and both screenshot routes stay
+public, because the badge must still render for an unactivated visitor and
+GitHub's image proxy never carries the cookie. The existing per-host rate
+limit still applies, as defence in depth.
+
+**Existing previews have no token.** A record written before the field
+existed decodes to `FeedbackToken == ""`. The reconcile loop's tick backfills
+it: for every running or sleeping preview with feedback on and an empty
+token, it generates one, persists it, and republishes the sticky comment once
+so the activation link appears — the same care `FeedbackEnabled` already
+needed, since a plain `bool` added the same way once silently turned feedback
+off for every live preview instead of reading its zero value as "unset".
+
+The badge carries a cross that closes it; the choice is remembered per host in
+`localStorage` and `Ctrl`/`Cmd` + `F` brings it back, straight into a report.
+The widget package itself knows nothing about any of this: from its point of
+view a `401` on its configured endpoint means *locked*, full stop — see
+[`widget-package.md`](./widget-package.md#locked).
 
 ## Routing on a preview host
 
 Every request whose path starts with `/_prevly/` is answered by the daemon and
 never reaches the container. It does not wake a sleeping preview.
 
-| Method | Path | Answer |
-|---|---|---|
-| GET | `/_prevly/feedback.js` | the widget bundle, `application/javascript`, `Cache-Control: no-cache` |
-| GET | `/_prevly/api/feedback` | `200 {"items":[Feedback…]}` for this host, newest first, no binary |
-| POST | `/_prevly/api/feedback` | multipart, see below. `201 {"item":Feedback}` |
-| GET | `/_prevly/feedback/{id}/screenshot.png` | `image/png`, immutable cache |
-| anything else | `/_prevly/*` | `404` |
+| Method | Path | Auth | Answer |
+|---|---|---|---|
+| GET | `/_prevly/feedback.js` | public | the widget bundle, `application/javascript`, `Cache-Control: no-cache` |
+| GET | `/_prevly/activate?t=<token>` | token in the query | sets the feedback cookie, `302` to `/`; `404` on a mismatch |
+| GET | `/_prevly/api/feedback` | `prevly_feedback` cookie | `200 {"items":[Feedback…]}` for this host, newest first, no binary; `401` without the cookie |
+| POST | `/_prevly/api/feedback` | `prevly_feedback` cookie | multipart, see below. `201 {"item":Feedback}`; `401` without the cookie |
+| GET | `/_prevly/feedback/{id}/screenshot.png` | public | `image/png`, cache bounded by the retention sweep (below) |
+| anything else | `/_prevly/*` | — | `404` |
 
 The same `/_prevly/feedback/{id}/screenshot.png` and `/_prevly/feedback.js`
 are also served on the base domain (`https://<base>/…`): the PR comment
 references the screenshot there so the image outlives the preview.
 
-Unknown host (no preview in the store) → `404` as today.
+Unknown host (no preview in the store) → `404` as today. A screenshot's
+`Cache-Control` carries `max-age` set to the seconds left before the file's
+mtime plus `feedback.retention` — never `immutable` — so a client or GitHub's
+image proxy cannot keep serving an image for longer than the sweep keeps the
+file on disk.
 
 ## POST /_prevly/api/feedback
 
@@ -57,7 +104,7 @@ answers it gives. A payload outside a bound is rejected whole, never truncated.
 | `screenshot` part | ≤ 3 MiB, PNG, optional |
 | `comment` | 1..4000, the only required field |
 | `author` | 1..80, required |
-| `type` | `bug`, `design` or `question`; `bug` when absent |
+| `type` | any id matching `^[a-z0-9][a-z0-9-]{0,31}$`; `bug` when absent |
 | `page` | starts with `/`, ≤ 2048 |
 | `title`, `element.text`, `element.heading` | ≤ 200, ≤ 120, ≤ 120 |
 | `selector`, `element.xpath` | ≤ 500 |
@@ -79,17 +126,17 @@ and the reconcile loop retries it on its next tick.
 ```jsonc
 {
   "id": "01J8…",                    // time-ordered, URL-safe, unique
-  "repo": "akord-securite/KARE",
+  "repo": "acme/shop",
   "pr": 1268,
-  "app": "kare",
+  "app": "web",
   "type": "bug",
-  "page": "/reports/123?tab=costs",
-  "author": "Thomas",
+  "page": "/cart/123?promo=save10",
+  "author": "Jordan",
   "comment": "The total is wrong",
   "selector": "…", "element": {…}, "click": {…}, "rect": {…},   // as posted
   "viewport": {…},
   "created_at": "2026-09-21T10:12:40Z",
-  "comment_url": "https://github.com/akord-securite/KARE/pull/1268#issuecomment-123", // or null
+  "comment_url": "https://github.com/acme/shop/pull/1268#issuecomment-123", // or null
   "screenshot_url": "https://<base>/_prevly/feedback/01J8…/screenshot.png" // or null
 }
 ```
@@ -109,7 +156,7 @@ One plain comment per feedback (never the sticky one), authored by the App.
 
 ```markdown
 <!-- prevly-feedback:01J8… -->
-### 🐞 Bug · Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-rs.<base>/reports/123?tab=costs>)
+### 🐞 Bug · Jordan · `web` · [/cart/123?promo=save10](<https://pr-1268-web.<base>/cart/123?promo=save10>)
 
 > The total is wrong
 
@@ -123,15 +170,15 @@ One plain comment per feedback (never the sticky one), authored by the App.
 
 | | |
 |---|---|
-| URL | <https://pr-1268-rs.<base>/reports/123?tab=costs> |
-| App | `kare` |
+| URL | <https://pr-1268-web.<base>/cart/123?promo=save10> |
+| App | `web` |
 | stage | `staging` |
-| Section | Détail des prestations |
+| Section | Order summary |
 | CSS selector | `main > table tr:nth-child(3) td.total` |
 | Element | `<td>` |
-| Element text | "1 234,00 €" |
+| Element text | "$1,234.00" |
 | Attributes | `id="grand-total"` |
-| Ancestors | `main#report > table.prestations > tbody > tr` |
+| Ancestors | `main#cart > table.line-items > tbody > tr` |
 | XPath | `/html/body/main/table/tbody/tr[3]/td[4]` |
 | Clicked at | x 812, y 403 in the viewport |
 | Viewport | 1440×900 @2x |
@@ -151,7 +198,7 @@ One plain comment per feedback (never the sticky one), authored by the App.
 <details><summary>Network (1 failed request)</summary>
 
 ```
-2026-09-21T10:12:33Z GET /rs/v1/reports/123 500 x-request-id=req-9f2c
+2026-09-21T10:12:33Z GET /api/v1/cart/123 500 x-request-id=req-9f2c
 ```
 
 </details>
@@ -160,6 +207,11 @@ One plain comment per feedback (never the sticky one), authored by the App.
 Only the heading and the reviewer's own words are visible. The screenshot, the
 location table, the console and the network are folded, so a pull request
 collecting a dozen reports stays readable.
+
+`bug`, `design` and `question` keep their own glyph and name (🐞/🎨/❓); any
+other configured type id gets one neutral glyph (🏷️) and its id, capitalized
+and de-hyphenated (`feature-request` → "Feature Request") — sanitized like any
+other reviewer-supplied text, since the id travels from the client.
 
 Nothing is added to the sticky comment: the widget is already there.
 
@@ -175,6 +227,11 @@ record incl. client/console/context/network, plus `comment_id`, `installation_id
 `Preview.feedback_enabled` is a nullable bool read through `FeedbackOn()`:
 unset means on, matching the `.prevly.yml` default, so a preview stored before
 the field existed keeps serving the widget.
+
+`Preview.feedback_token` gates the feedback API and the activation link (see
+above): generated once at deploy, kept stable across redeploys, destroyed with
+the preview. A record stored before the field existed decodes to `""` until
+the reconcile loop's tick backfills it.
 
 Teardown of a preview deletes its feedback records; screenshot files stay
 until `feedback.retention` (default `90d`) elapses, swept by the reconcile
@@ -208,11 +265,14 @@ func (p *Proxy) SetInjector(i Injector)
 func (p *Proxy) SetPreviewPathHandler(prefix string, h http.Handler)
 ```
 
-The proxy also drops `Accept-Encoding` on outbound requests that accept
-`text/html`, so injected responses are never compressed; `Content-Length` is
-recomputed and `Content-Encoding` removed when a body is rewritten. Responses
-above 8 MiB are passed through untouched. Streaming is lost for injected
-responses (buffered), accepted for previews.
+The proxy also drops `Accept-Encoding` on outbound requests whose `Accept`
+explicitly names `text/html` — what a navigation sends — so injected responses
+are never compressed; `Content-Length` is recomputed and `Content-Encoding`
+removed when a body is rewritten. An empty `Accept` or `*/*` (what scripts and
+a default `fetch` send) does *not* count: treating them as HTML made every JS
+chunk and API response on a preview travel uncompressed too. Responses above
+8 MiB are passed through untouched. Streaming is lost for injected responses
+(buffered), accepted for previews.
 
 `internal/feedback` (owned by the feedback task) exposes:
 
@@ -234,5 +294,11 @@ deploy time, so serving a request never re-fetches `.prevly.yml`.
 `OnTeardown func(repo string, pr int, app string)` (called from
 `teardownPreview`) and `FeedbackTick func(ctx context.Context)` (called at the
 end of each loop tick).
+
+The reconciler itself owns the token: `upsertBuilding` (deploy) generates
+`FeedbackToken` when empty, and the loop's own `backfillFeedbackToken`, called
+once per preview per tick, does the same for a preview stored before the
+field existed and republishes the sticky comment through the existing
+`publish`/`updateComment` path.
 
 Wired in `cmd/prevly/run.go` by the feedback task.

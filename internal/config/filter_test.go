@@ -124,11 +124,11 @@ func TestBranchAllowedEmptyTriggersAllowsAll(t *testing.T) {
 
 func TestHostDerivation(t *testing.T) {
 	t.Parallel()
-	base := "preview.staging.kare-app.fr"
+	base := "preview.staging.example.com"
 
 	multi := multiAppConfig()
 	bo, _ := multi.App("backoffice")
-	if got := multi.Host(base, 42, bo); got != "pr-42-bo.preview.staging.kare-app.fr" {
+	if got := multi.Host(base, 42, bo); got != "pr-42-bo.preview.staging.example.com" {
 		t.Fatalf("multi-app host = %q", got)
 	}
 
@@ -136,7 +136,7 @@ func TestHostDerivation(t *testing.T) {
 		{Name: "web", Port: 3000, Dockerfile: "Dockerfile", Paths: []string{"**"}},
 	}}
 	web, _ := single.App("web")
-	if got := single.Host(base, 7, web); got != "pr-7.preview.staging.kare-app.fr" {
+	if got := single.Host(base, 7, web); got != "pr-7.preview.staging.example.com" {
 		t.Fatalf("single-app host = %q", got)
 	}
 }

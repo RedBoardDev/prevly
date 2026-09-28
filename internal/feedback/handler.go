@@ -3,6 +3,7 @@ package feedback
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,12 +57,43 @@ const (
 // always sends one; an older bundle cached in a reviewer's browser does not.
 const defaultType = "bug"
 
-// reportTypes is the closed set a report can be filed under.
-var reportTypes = map[string]bool{"bug": true, "design": true, "question": true}
+// maxTypeID bounds a report type id: it travels in the PR comment heading and
+// is stored, never a closed set, so a host can configure its own types.
+const maxTypeID = 32
+
+// validTypeID reports whether id matches ^[a-z0-9][a-z0-9-]{0,31}$, the same
+// pattern the widget validates its `types` option against.
+func validTypeID(id string) bool {
+	if id == "" || len(id) > maxTypeID {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		alnum := (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+		if i == 0 {
+			if !alnum {
+				return false
+			}
+			continue
+		}
+		if !alnum && c != '-' {
+			return false
+		}
+	}
+	return true
+}
 
 // postTimeout bounds the synchronous PR comment; a slower GitHub leaves the
 // report stored and unposted for the reconcile loop.
 const postTimeout = 10 * time.Second
+
+// feedbackCookie gates read and write access to a preview's feedback: its
+// value must match the preview's FeedbackToken, compared in constant time.
+// Path is scoped to /_prevly/ so the previewed application never receives it.
+const feedbackCookie = "prevly_feedback"
+
+// defaultActivateMaxAge bounds the cookie's lifetime for a preview with no TTL.
+const defaultActivateMaxAge = 30 * 24 * time.Hour
 
 // pngMagic is the PNG file signature.
 var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
@@ -71,6 +103,7 @@ var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 func (s *Service) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_prevly/feedback.js", s.serveScript)
+	mux.HandleFunc("GET /_prevly/activate", s.activate)
 	mux.HandleFunc("GET /_prevly/api/feedback", s.listReports)
 	mux.HandleFunc("POST /_prevly/api/feedback", s.createReport)
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
@@ -117,15 +150,84 @@ func (s *Service) serveScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(s.screenshotMaxAge(info.ModTime())))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, id+".png", info.ModTime(), f)
+}
+
+// screenshotMaxAge is the seconds left before the sweep deletes this file, so
+// a cache never outlives it: `immutable` plus a year-long max-age let GitHub's
+// image proxy keep serving a screenshot for months after retention deleted it.
+func (s *Service) screenshotMaxAge(modTime time.Time) int {
+	retention := s.cfg.Retention.Std()
+	if retention <= 0 {
+		return 0
+	}
+	left := retention - s.now().Sub(modTime)
+	if left <= 0 {
+		return 0
+	}
+	return int(left / time.Second)
+}
+
+// activate matches the token in the pull request's activation link against
+// the preview's, and on success sets the cookie that gates the feedback API.
+// A mismatch, an empty token or an unknown host all answer 404, identical to
+// any other unknown path, so the endpoint reveals nothing.
+func (s *Service) activate(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.previewFor(r)
+	if !ok || p.FeedbackToken == "" || !validToken(r.URL.Query().Get("t"), p.FeedbackToken) {
+		notFound(w, r)
+		return
+	}
+	maxAge := defaultActivateMaxAge
+	if p.TTL > 0 {
+		maxAge = p.TTL
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     feedbackCookie,
+		Value:    p.FeedbackToken,
+		Path:     "/_prevly/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int(maxAge / time.Second),
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// validToken reports whether got matches want, in constant time. Log either
+// argument here and the feedback token ends up in the daemon's logs, which
+// defeats the whole gate.
+func validToken(got, want string) bool {
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+// requireFeedbackCookie reports whether the request carries the preview's
+// feedback cookie. GET /_prevly/feedback.js and the screenshot routes never
+// call this: the badge must render, and GitHub's image proxy fetches
+// screenshots with no cookie at all.
+func requireFeedbackCookie(r *http.Request, p *model.Preview) bool {
+	if p.FeedbackToken == "" {
+		return false
+	}
+	c, err := r.Cookie(feedbackCookie)
+	if err != nil {
+		return false
+	}
+	return validToken(c.Value, p.FeedbackToken)
 }
 
 func (s *Service) listReports(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.previewFor(r)
 	if !ok {
 		notFound(w, r)
+		return
+	}
+	if !requireFeedbackCookie(r, p) {
+		writeError(w, http.StatusUnauthorized, "locked")
 		return
 	}
 	records, err := s.store.ListFeedbackByHost(p.Host)
@@ -145,6 +247,10 @@ func (s *Service) createReport(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.previewFor(r)
 	if !ok {
 		notFound(w, r)
+		return
+	}
+	if !requireFeedbackCookie(r, p) {
+		writeError(w, http.StatusUnauthorized, "locked")
 		return
 	}
 	if allowed, retry := s.limiter.allow(p.Host); !allowed {
@@ -301,8 +407,8 @@ func (m *meta) validate() error {
 	if m.Type == "" {
 		m.Type = defaultType
 	}
-	if !reportTypes[m.Type] {
-		return errors.New("type: must be bug, design or question")
+	if !validTypeID(m.Type) {
+		return errors.New("type: must match ^[a-z0-9][a-z0-9-]{0,31}$")
 	}
 	m.Author = strings.TrimSpace(m.Author)
 	m.Comment = strings.TrimSpace(m.Comment)

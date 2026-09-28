@@ -1,7 +1,6 @@
 import { el } from './dom';
 import { ICON_CLOSE, ICON_TARGET, icon } from './icons';
-import type { Corner, Labels, ReportType } from './options';
-import { REPORT_TYPES } from './options';
+import type { Corner, Labels, ReportType, TypeOption } from './options';
 import { canvasToPng } from './screenshot';
 import type { Shot } from './screenshot';
 import { ACCENT } from './styles';
@@ -28,6 +27,10 @@ export interface PanelOptions {
   author: string;
   askAuthor: boolean;
   allowPick: boolean;
+  types: TypeOption[];
+  // Set once the server answered 401: the badge still renders, but opening it
+  // shows labels.locked instead of the form. There is nothing to submit.
+  locked?: boolean;
   onPick(): void;
   onCancel(): void;
   onSubmit(input: PanelSubmission): Promise<string | null>;
@@ -39,11 +42,12 @@ export interface Panel {
 }
 
 export function openPanel(root: ParentNode & Node, options: PanelOptions): Panel {
+  if (options.locked) return openLockedPanel(root, options);
   const { labels, shot } = options;
   const shapes: Shape[] = [];
   let draft: Shape | null = null;
   let sending = false;
-  let type: ReportType = 'bug';
+  let type: ReportType = options.types[0]?.id ?? 'bug';
 
   const canvas = el('canvas');
   const stroke = shot ? Math.max(2, Math.round(3 * shot.scale)) : 3;
@@ -113,23 +117,23 @@ export function openPanel(root: ParentNode & Node, options: PanelOptions): Panel
     },
   });
 
-  const typeButtons = REPORT_TYPES.map((value) =>
+  const typeButtons = options.types.map((option) =>
     el('button', {
       class: 'type-option',
-      text: typeLabel(labels, value),
+      text: option.label,
       attrs: {
         type: 'button',
         role: 'radio',
-        'aria-checked': value === type ? 'true' : 'false',
-        'data-prevly-type': value,
+        'aria-checked': option.id === type ? 'true' : 'false',
+        'data-prevly-type': option.id,
       },
       on: {
         click: () => {
-          type = value;
+          type = option.id;
           for (const node of typeButtons) {
             node.setAttribute(
               'aria-checked',
-              node.getAttribute('data-prevly-type') === value ? 'true' : 'false',
+              node.getAttribute('data-prevly-type') === option.id ? 'true' : 'false',
             );
           }
         },
@@ -349,10 +353,54 @@ export function openPanel(root: ParentNode & Node, options: PanelOptions): Panel
   };
 }
 
-function typeLabel(labels: Labels, type: ReportType): string {
-  if (type === 'design') return labels.typeDesign;
-  if (type === 'question') return labels.typeQuestion;
-  return labels.typeBug;
+// openLockedPanel is what the badge opens instead of the report form while
+// the widget is locked: the reviewer has not opened the preview from its
+// activation link yet, so there is nothing to submit.
+function openLockedPanel(root: ParentNode & Node, options: PanelOptions): Panel {
+  const { labels } = options;
+  const card = el(
+    'div',
+    { class: 'panel', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': labels.panel, 'data-prevly': 'panel' } },
+    el(
+      'div',
+      { class: 'panel-head' },
+      el('span', { class: 'panel-title', text: labels.panel }),
+      el(
+        'button',
+        {
+          class: 'icon-button',
+          attrs: { type: 'button', 'aria-label': labels.cancel },
+          on: { click: () => options.onCancel() },
+        },
+        icon(ICON_CLOSE, 'icon-button-glyph'),
+      ),
+    ),
+    el('div', { class: 'notice', text: labels.locked, attrs: { 'data-prevly': 'locked-message' } }),
+    el(
+      'div',
+      { class: 'panel-actions' },
+      el('button', {
+        class: 'btn',
+        text: labels.cancel,
+        attrs: { type: 'button', 'aria-label': labels.cancel, 'data-prevly': 'cancel' },
+        on: { click: () => options.onCancel() },
+      }),
+    ),
+  );
+
+  const container = el('div', { class: 'panel-anchor', attrs: { 'data-corner': options.corner } }, card);
+  root.appendChild(container);
+  const surface = createSurface(container, options.topLayer);
+  surface.show();
+
+  return {
+    close() {
+      surface.destroy();
+    },
+    focus() {
+      card.focus();
+    },
+  };
 }
 
 function drawShape(ctx: CanvasRenderingContext2D, shape: Shape): void {

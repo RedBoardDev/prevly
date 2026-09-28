@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,11 @@ import (
 )
 
 const previewHost = "pr-42-web.preview.example.com"
+
+// testToken is the feedback token seeded on every fixture preview. post/get
+// carry it as the feedback cookie so existing tests exercise the API as an
+// activated reviewer would; the auth tests below drive the cookie themselves.
+const testToken = "unit-test-feedback-token-do-not-reuse-AAAA"
 
 type fakeGitHub struct {
 	mu     sync.Mutex
@@ -105,7 +111,7 @@ func livePreview() *model.Preview {
 		Repo: "org/repo", PRNumber: 42, AppName: "web",
 		Host: previewHost, URL: "https://" + previewHost,
 		Status: model.StatusRunning, InstallationID: 7, CommitSHA: "abc1234def",
-		FeedbackEnabled: boolPtr(true),
+		FeedbackEnabled: boolPtr(true), FeedbackToken: testToken,
 	}
 }
 
@@ -151,10 +157,20 @@ func multipartBody(t *testing.T, meta string, screenshot []byte) (string, io.Rea
 
 func post(t *testing.T, h http.Handler, host, meta string, screenshot []byte) *httptest.ResponseRecorder {
 	t.Helper()
+	return postAs(t, h, host, testToken, meta, screenshot)
+}
+
+// postAs is post with an explicit (possibly wrong or absent) cookie value, for
+// the tests that exercise the auth gate itself.
+func postAs(t *testing.T, h http.Handler, host, cookie, meta string, screenshot []byte) *httptest.ResponseRecorder {
+	t.Helper()
 	ct, body := multipartBody(t, meta, screenshot)
 	req := httptest.NewRequest(http.MethodPost, "/_prevly/api/feedback", body)
 	req.Host = host
 	req.Header.Set("Content-Type", ct)
+	if cookie != "" {
+		req.AddCookie(&http.Cookie{Name: feedbackCookie, Value: cookie})
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -162,8 +178,17 @@ func post(t *testing.T, h http.Handler, host, meta string, screenshot []byte) *h
 
 func get(t *testing.T, h http.Handler, host, path string) *httptest.ResponseRecorder {
 	t.Helper()
+	return getAs(t, h, host, testToken, path)
+}
+
+// getAs is get with an explicit (possibly wrong or absent) cookie value.
+func getAs(t *testing.T, h http.Handler, host, cookie, path string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = host
+	if cookie != "" {
+		req.AddCookie(&http.Cookie{Name: feedbackCookie, Value: cookie})
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -326,6 +351,7 @@ func TestCreateWrongContentType(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/_prevly/api/feedback", strings.NewReader("{}"))
 	req.Host = previewHost
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: feedbackCookie, Value: testToken})
 	rec := httptest.NewRecorder()
 	f.svc.PreviewHandler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnsupportedMediaType {
@@ -433,8 +459,9 @@ func TestScreenshotServing(t *testing.T) {
 		if got.Header().Get("Content-Type") != "image/png" {
 			t.Fatalf("%s: content-type = %q", name, got.Header().Get("Content-Type"))
 		}
-		if got.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
-			t.Fatalf("%s: cache-control = %q", name, got.Header().Get("Cache-Control"))
+		cc := got.Header().Get("Cache-Control")
+		if !strings.HasPrefix(cc, "public, max-age=") || strings.Contains(cc, "immutable") {
+			t.Fatalf("%s: cache-control = %q", name, cc)
 		}
 		missing := get(t, h, previewHost, "/_prevly/feedback/"+strings.Repeat("0", idLen)+"/screenshot.png")
 		if missing.Code != http.StatusNotFound {
@@ -444,6 +471,55 @@ func TestScreenshotServing(t *testing.T) {
 		if traversal.Code != http.StatusNotFound {
 			t.Fatalf("%s: traversal status = %d", name, traversal.Code)
 		}
+	}
+}
+
+// TestScreenshotCacheMaxAgeReflectsRetention drives the service clock directly:
+// max-age must track how long the sweep will still keep the file, not a fixed
+// year, or GitHub's image proxy keeps serving a screenshot prevly already
+// deleted.
+func TestScreenshotCacheMaxAgeReflectsRetention(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := st.Put(livePreview()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The service clock is fixed: only the file's own mtime moves, so the
+	// comparison isolates screenshotMaxAge from wall-clock timing noise.
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cfg := config.FeedbackConfig{Retention: config.Duration(90 * 24 * time.Hour), MaxPerHour: 30}
+	svc := New(Deps{
+		Store: st, GitHub: &fakeGitHub{}, Config: cfg,
+		BaseDomain: "preview.example.com", DataDir: dir,
+		Logger: applog.New(applog.Options{Level: "error", Out: io.Discard}),
+		Now:    func() time.Time { return now },
+	})
+
+	rec := post(t, svc.PreviewHandler(), previewHost, validMeta(), pngBytes())
+	id, _ := decodeItem(t, rec.Body.Bytes())["id"].(string)
+	shot := svc.screenshotPath(id)
+
+	if err := os.Chtimes(shot, now.Add(-30*24*time.Hour), now.Add(-30*24*time.Hour)); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	got := get(t, svc.PreviewHandler(), previewHost, "/_prevly/feedback/"+id+"/screenshot.png")
+	want := "public, max-age=" + strconv.Itoa(60*24*60*60)
+	if cc := got.Header().Get("Cache-Control"); cc != want {
+		t.Fatalf("cache-control = %q, want %q", cc, want)
+	}
+
+	if err := os.Chtimes(shot, now.Add(-120*24*time.Hour), now.Add(-120*24*time.Hour)); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	past := get(t, svc.PreviewHandler(), previewHost, "/_prevly/feedback/"+id+"/screenshot.png")
+	if cc := past.Header().Get("Cache-Control"); cc != "public, max-age=0" {
+		t.Fatalf("past retention: cache-control = %q, want max-age=0", cc)
 	}
 }
 
@@ -512,6 +588,26 @@ func TestCreateDefaultsTypeToBug(t *testing.T) {
 	}
 }
 
+// TestCreateAcceptsACustomType proves the server accepts any type id matching
+// the pattern, not just the closed bug/design/question set, and renders an
+// unknown one with a neutral glyph and its capitalized id.
+func TestCreateAcceptsACustomType(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, defaultConfig())
+
+	meta := metaWith(t, map[string]any{"type": "feature-request"})
+	rec := post(t, f.svc.PreviewHandler(), previewHost, meta, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
+	}
+	if got := decodeItem(t, rec.Body.Bytes())["type"]; got != "feature-request" {
+		t.Fatalf("type = %v, want feature-request", got)
+	}
+	if !strings.Contains(f.gh.last(), "### 🏷️ Feature Request ·") {
+		t.Fatalf("comment heading missing the neutral glyph and capitalized id:\n%s", f.gh.last())
+	}
+}
+
 func TestCreateStoresTypeContextAndNetwork(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, defaultConfig())
@@ -563,11 +659,13 @@ func TestCreateRejectsOutOfBoundsExtras(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"unknown type":     metaWith(t, map[string]any{"type": "praise"}),
-		"context keys":     metaWith(t, map[string]any{"context": tooManyKeys}),
-		"context value":    metaWith(t, map[string]any{"context": map[string]string{"k": strings.Repeat("v", 201)}}),
-		"network entries":  metaWith(t, map[string]any{"network": network}),
-		"network path len": metaWith(t, map[string]any{"network": []map[string]any{{"method": "GET", "path": "/" + strings.Repeat("a", 200), "status": 500}}}),
+		"type with uppercase":  metaWith(t, map[string]any{"type": "Praise"}),
+		"type too long":        metaWith(t, map[string]any{"type": strings.Repeat("a", maxTypeID+1)}),
+		"type starting with -": metaWith(t, map[string]any{"type": "-praise"}),
+		"context keys":         metaWith(t, map[string]any{"context": tooManyKeys}),
+		"context value":        metaWith(t, map[string]any{"context": map[string]string{"k": strings.Repeat("v", 201)}}),
+		"network entries":      metaWith(t, map[string]any{"network": network}),
+		"network path len":     metaWith(t, map[string]any{"network": []map[string]any{{"method": "GET", "path": "/" + strings.Repeat("a", 200), "status": 500}}}),
 	}
 	for name, meta := range cases {
 		rec := post(t, f.svc.PreviewHandler(), previewHost, meta, nil)

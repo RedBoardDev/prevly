@@ -35,8 +35,9 @@ widget.unmount();
 | `labels` | English | Every visible string, so the host can translate. |
 | `position` | `'bottom-right'` | Starting corner. The reviewer can drag it elsewhere and that wins. |
 | `shortcut` | `'f'` | Pressed with the platform modifier, starts a report. It also brings the badge back after it was closed. |
-| `network` | `{ origins: [] }` | Origins whose failed requests are captured. Empty means the page's own origin. |
+| `network` | `{ origins: [] }` | Origins whose failed requests are captured. Empty means the page's own origin. `network.requestIdHeader` (default `'x-request-id'`) is the response header read into the payload's `requestId` field — `x-request-id` is one API's convention, not a standard, so a host using `x-correlation-id` or `traceparent` sets this instead. The payload field stays named `requestId` regardless. |
 | `theme` | `'auto'` | `auto`, `light` or `dark`. |
+| `types` | the three below | `Array<{ id, label }>`, 1 to 8 entries, `id` unique and matching `^[a-z0-9][a-z0-9-]{0,31}$`. Renders the panel's type selector, first entry preselected. An invalid list (bad id, empty label, duplicate, too many/none) falls back to the default instead of throwing: `bug`/`Bug`, `design`/`Design`, `question`/`Question`. |
 
 `mountFeedback` never throws and never returns null: a browser that cannot
 support it gets an inert handle. The handle also carries `open()`, which
@@ -80,21 +81,21 @@ name is asked once, and not at all when the host supplied one. `Ctrl`/`Cmd` plus
 
 ```jsonc
 {
-  "type": "bug",                      // bug | design | question
-  "comment": "Le total est faux",     // 1..4000, the only required field
-  "author": "Thomas",                 // reporter.name when the host supplies one, asked once otherwise
-  "page": "/reports/123?tab=costs",   // starts with "/", ≤ 2000
-  "title": "Rapport – KARE",          // document.title, ≤ 200
+  "type": "bug",                      // any configured type id, "bug" when absent
+  "comment": "The total is wrong",    // 1..4000, the only required field
+  "author": "Jordan",                 // reporter.name when the host supplies one, asked once otherwise
+  "page": "/cart/123?promo=save10",   // starts with "/", ≤ 2000
+  "title": "Checkout – Acme Shop",    // document.title, ≤ 200
   "context": { "stage": "staging" },  // echoed from the options
   "selector": "main td.total",        // absent for a page-level report
   "element": {                        // absent for a page-level report
     "tag": "td",
-    "text": "1 234,00 €",
+    "text": "$1,234.00",
     "xpath": "/html/body/main/table/tbody/tr[3]/td[4]",
     "attrs": { "id": "grand-total" }, // locating attributes only, never `value`
     "classes": ["total"],
-    "ancestors": ["main#report", "table.prestations"],
-    "heading": "Détail des prestations"
+    "ancestors": ["main#cart", "table.line-items"],
+    "heading": "Order summary"
   },
   "click": { "x": 812, "y": 403 },
   "rect": { "x": 780, "y": 390, "w": 96, "h": 28 },
@@ -102,7 +103,7 @@ name is asked once, and not at all when the host supplied one. `Ctrl`/`Cmd` plus
   "client": "Chrome 152 on macOS",    // coarse label, never the raw user agent
   "console": [ { "level": "error", "message": "…", "at": "…" } ],
   "network": [                        // see the bounds below
-    { "method": "GET", "path": "/rs/v1/reports/123", "status": 500,
+    { "method": "GET", "path": "/api/v1/cart/123", "status": 500,
       "requestId": "req-9f2c", "at": "2026-09-28T09:12:33Z" }
   ]
 }
@@ -112,6 +113,26 @@ name is asked once, and not at all when the host supplied one. `Ctrl`/`Cmd` plus
 Each item needs at least `id`, `page`, `selector`, `author`, `comment`,
 `created_at` and may carry `url` to link the report where it landed.
 
+## Locked
+
+The package knows nothing about prevly or any particular gating scheme, but
+it defines one generic rule any server can opt into: **a `401` on `GET
+<endpoint>` means the widget is locked.** The badge still renders and still
+counts existing pins it can see, but opening it shows `labels.locked` instead
+of the report form — there is nothing to submit until the host lets this
+viewer in. A `401` on `POST <endpoint>` switches to the same locked state,
+for the case where access was revoked between the last list and this submit.
+
+A `404` on `GET <endpoint>` is a different thing entirely and is *not*
+locked: it means the server has no list route at all (no backing store,
+feedback turned off), so the widget draws no pins and still lets a report be
+posted. Any other status while listing is treated as "no items yet", not
+locked.
+
+`labels.locked` defaults to *"Open this preview from the link in the pull
+request to send feedback."* — a host embedding the package for its own
+authenticated environment gives it whatever text fits how access there works.
+
 ## Network capture bounds
 
 Deliberately narrow, because a report full of ordinary 401s and blocked
@@ -119,7 +140,10 @@ analytics calls sends whoever reads it after ghosts.
 
 - Only requests to the configured origins, defaulting to the page's own. Nothing
   third-party.
-- Only status `>= 500`, and requests that never completed at all.
+- Only status `>= 500`, and requests that never completed at all — except one
+  the application itself cancelled (`AbortError`, including a `DOMException`
+  carrying that name): a fast client-side navigation aborts its own pending
+  fetches constantly, and none of those are a failure worth reporting.
 - The path only, query string dropped. Never a body, never a header other than
   `x-request-id` when the server exposes it.
 - At most 5 entries, each path ≤ 200 characters.

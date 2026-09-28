@@ -28,30 +28,44 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
 }
 
 describe('list', () => {
-  it('returns the items array', async () => {
+  it('returns the items array, not locked', async () => {
     const items: FeedbackItem[] = [
       { id: '1', page: '/a', author: 'T', comment: 'c', created_at: '2026-09-21T10:00:00Z' },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { items }));
     const api = createApi({ fetchImpl: fetchImpl as unknown as typeof fetch });
 
-    await expect(api.list()).resolves.toEqual(items);
+    await expect(api.list()).resolves.toEqual({ items, locked: false });
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(API_PATH);
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ method: 'GET' });
   });
 
-  it('returns an empty list on failure', async () => {
+  it('is locked on a 401: the server has a list route but nobody activated it', async () => {
+    const api = createApi({
+      fetchImpl: vi.fn().mockResolvedValue(new Response('nope', { status: 401 })) as unknown as typeof fetch,
+    });
+    await expect(api.list()).resolves.toEqual({ items: [], locked: true });
+  });
+
+  it('is not locked on a 404: the server simply has no list route', async () => {
+    const api = createApi({
+      fetchImpl: vi.fn().mockResolvedValue(new Response('nope', { status: 404 })) as unknown as typeof fetch,
+    });
+    await expect(api.list()).resolves.toEqual({ items: [], locked: false });
+  });
+
+  it('returns an empty, unlocked list on a server error', async () => {
     const api = createApi({
       fetchImpl: vi.fn().mockResolvedValue(new Response('nope', { status: 500 })) as unknown as typeof fetch,
     });
-    await expect(api.list()).resolves.toEqual([]);
+    await expect(api.list()).resolves.toEqual({ items: [], locked: false });
   });
 
-  it('returns an empty list when the network throws', async () => {
+  it('returns an empty, unlocked list when the network throws', async () => {
     const api = createApi({
       fetchImpl: vi.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch,
     });
-    await expect(api.list()).resolves.toEqual([]);
+    await expect(api.list()).resolves.toEqual({ items: [], locked: false });
   });
 });
 
@@ -125,6 +139,13 @@ describe('submit', () => {
       kind: 'error',
       message: '400 · meta too large',
     });
+  });
+
+  it('is locked on a 401', async () => {
+    const api = createApi({
+      fetchImpl: vi.fn().mockResolvedValue(jsonResponse(401, { error: 'locked' })) as unknown as typeof fetch,
+    });
+    expect(await api.submit(meta, null)).toEqual({ ok: false, kind: 'locked' });
   });
 
   it('surfaces a network failure', async () => {
