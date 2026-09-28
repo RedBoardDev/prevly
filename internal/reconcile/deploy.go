@@ -101,6 +101,13 @@ func (r *Reconciler) upsertBuilding(ev *gh.PullRequestEvent, repoCfg *config.Rep
 	p.Idle = r.idleFor(repoCfg)
 	feedbackOn := repoCfg.FeedbackOn()
 	p.FeedbackEnabled = &feedbackOn
+	if p.FeedbackToken == "" {
+		if token, err := model.NewFeedbackToken(); err != nil {
+			r.logger.Error("generate feedback token", "repo", ev.Repo, "pr", ev.Number, "app", app.Name, "err", err)
+		} else {
+			p.FeedbackToken = token
+		}
+	}
 	if p.LastSeenAt.IsZero() {
 		p.LastSeenAt = r.now()
 	}

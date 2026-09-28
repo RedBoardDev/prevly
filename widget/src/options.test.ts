@@ -75,4 +75,62 @@ describe('resolveOptions', () => {
     expect(resolved.position).toBe('bottom-right');
     expect(resolved.theme).toBe('auto');
   });
+
+  it('defaults the correlation header to x-request-id', () => {
+    expect(resolveOptions({ endpoint: '/x' }).requestIdHeader).toBe('x-request-id');
+  });
+
+  it('accepts a custom correlation header', () => {
+    const resolved = resolveOptions({ endpoint: '/x', network: { requestIdHeader: 'x-correlation-id' } });
+    expect(resolved.requestIdHeader).toBe('x-correlation-id');
+  });
+
+  it('falls back to x-request-id for an empty header name', () => {
+    expect(resolveOptions({ endpoint: '/x', network: { requestIdHeader: '' } }).requestIdHeader).toBe(
+      'x-request-id',
+    );
+  });
+
+  it('defaults to the three built-in types with English labels', () => {
+    const { types } = resolveOptions({ endpoint: '/x' });
+    expect(types).toEqual([
+      { id: 'bug', label: 'Bug' },
+      { id: 'design', label: 'Design' },
+      { id: 'question', label: 'Question' },
+    ]);
+  });
+
+  it('accepts a custom type list', () => {
+    const { types } = resolveOptions({
+      endpoint: '/x',
+      types: [
+        { id: 'praise', label: 'Praise' },
+        { id: 'idea', label: 'Idea' },
+      ],
+    });
+    expect(types).toEqual([
+      { id: 'praise', label: 'Praise' },
+      { id: 'idea', label: 'Idea' },
+    ]);
+  });
+
+  it('falls back to the defaults instead of throwing on an invalid type list', () => {
+    const cases: Array<unknown> = [
+      [],
+      [{ id: 'Bad Id', label: 'x' }],
+      [{ id: 'ok', label: '' }],
+      [{ id: 'dup' }, { id: 'dup', label: 'y' }],
+      Array.from({ length: 9 }, (_, i) => ({ id: `t${i}`, label: `T${i}` })),
+      'not-an-array',
+      [{ id: 'a'.repeat(33), label: 'too long' }],
+    ];
+    for (const types of cases) {
+      const resolved = resolveOptions({ endpoint: '/x', types: types as never });
+      expect(resolved.types).toEqual([
+        { id: 'bug', label: 'Bug' },
+        { id: 'design', label: 'Design' },
+        { id: 'question', label: 'Question' },
+      ]);
+    }
+  });
 });

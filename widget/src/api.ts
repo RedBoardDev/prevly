@@ -5,10 +5,20 @@ export const API_PATH = '/_prevly/api/feedback';
 type SubmitResult =
   | { ok: true; item: FeedbackItem }
   | { ok: false; kind: 'rate-limit'; retryAfter: number | null; message: string }
+  | { ok: false; kind: 'locked' }
   | { ok: false; kind: 'error'; message: string };
 
+// A 401 on the list route means the widget is locked: the badge still
+// renders, but opening it shows labels.locked instead of the form. A 404
+// means no list route at all (no backing store, or feedback off) and is not
+// locked: the widget draws no pins and still lets you post.
+interface ListResult {
+  items: FeedbackItem[];
+  locked: boolean;
+}
+
 export interface FeedbackApi {
-  list(): Promise<FeedbackItem[]>;
+  list(): Promise<ListResult>;
   submit(meta: FeedbackMeta, screenshot: Blob | null): Promise<SubmitResult>;
 }
 
@@ -22,18 +32,19 @@ export function createApi(options: ApiOptions = {}): FeedbackApi {
   const doFetch: typeof fetch = options.fetchImpl ?? ((...args) => fetch(...args));
 
   return {
-    async list(): Promise<FeedbackItem[]> {
+    async list(): Promise<ListResult> {
       try {
         const response = await doFetch(path, {
           method: 'GET',
           headers: { accept: 'application/json' },
           credentials: 'same-origin',
         });
-        if (!response.ok) return [];
+        if (response.status === 401) return { items: [], locked: true };
+        if (!response.ok) return { items: [], locked: false };
         const body = (await response.json()) as { items?: unknown };
-        return Array.isArray(body?.items) ? (body.items as FeedbackItem[]) : [];
+        return { items: Array.isArray(body?.items) ? (body.items as FeedbackItem[]) : [], locked: false };
       } catch {
-        return [];
+        return { items: [], locked: false };
       }
     },
 
@@ -55,6 +66,10 @@ export function createApi(options: ApiOptions = {}): FeedbackApi {
         });
       } catch (error) {
         return { ok: false, kind: 'error', message: errorText(error) };
+      }
+
+      if (response.status === 401) {
+        return { ok: false, kind: 'locked' };
       }
 
       if (response.status === 429) {

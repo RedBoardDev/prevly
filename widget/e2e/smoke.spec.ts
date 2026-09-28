@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 const BASE = 'http://localhost:4177';
+const TOKEN = 'dev-mock-feedback-token';
 
 const badge = '[data-prevly="badge"]';
 const panel = '[data-prevly="panel"]';
@@ -9,9 +10,16 @@ const comment = '[data-prevly="comment"]';
 const author = '[data-prevly="author"]';
 const send = '[data-prevly="send"]';
 const toast = '[data-prevly="toast"]';
+const lockedMessage = '[data-prevly="locked-message"]';
 
 async function received(page: Page): Promise<Array<Record<string, any>>> {
   return (await page.request.get(`${BASE}/_dev/received`)).json();
+}
+
+// activated follows the same link the sticky PR comment carries: it sets the
+// feedback cookie, then lands on the app exactly like a plain page.goto(BASE).
+async function activated(page: Page): Promise<void> {
+  await page.goto(`${BASE}/_prevly/activate?t=${TOKEN}`);
 }
 
 async function pickAndSend(page: Page, text: string): Promise<void> {
@@ -27,7 +35,7 @@ async function pickAndSend(page: Page, text: string): Promise<void> {
 
 test('point at a cell, annotate and submit', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
-  await page.goto(BASE);
+  await activated(page);
   await expect(page.locator(badge)).toBeVisible();
 
   await page.locator(badge).click();
@@ -46,7 +54,7 @@ test('point at a cell, annotate and submit', async ({ page }) => {
     await page.mouse.up();
   }
 
-  await page.locator(comment).fill('Le total ne correspond pas aux lignes.');
+  await page.locator(comment).fill('The total does not match the line items.');
   await page.locator(author).fill('Thomas');
   await page.locator(send).click();
 
@@ -59,11 +67,11 @@ test('point at a cell, annotate and submit', async ({ page }) => {
   expect(entry.metaType).toBe('application/json');
   expect(entry.meta.type).toBe('bug');
   expect(entry.meta.author).toBe('Thomas');
-  expect(entry.meta.comment).toBe('Le total ne correspond pas aux lignes.');
+  expect(entry.meta.comment).toBe('The total does not match the line items.');
   expect(entry.meta.page).toBe('/');
   expect(entry.meta.selector).toBeTruthy();
   expect(entry.meta.element).toMatchObject({ tag: 'td' });
-  expect(entry.meta.element.text).toContain('1 234,00');
+  expect(entry.meta.element.text).toContain('$1,234.00');
   expect(entry.meta.viewport.w).toBeGreaterThan(0);
   expect(entry.screenshotType).toBe('image/png');
   expect(entry.isPng).toBe(true);
@@ -73,17 +81,17 @@ test('point at a cell, annotate and submit', async ({ page }) => {
   await expect(pin).toHaveCount(1, { timeout: 15_000 });
   await expect(pin).toBeVisible();
   await pin.click();
-  await expect(page.locator('.popover')).toContainText('Le total ne correspond pas');
+  await expect(page.locator('.popover')).toContainText('The total does not match');
 });
 
 test('a page-level report carries the page and no element', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
-  await page.goto(BASE);
+  await activated(page);
 
   await page.locator(badge).click();
   await expect(page.locator(panel)).toBeVisible();
   await page.locator('[data-prevly-type="design"]').click();
-  await page.locator(comment).fill('La page entière est de travers.');
+  await page.locator(comment).fill('The whole page looks broken.');
   await page.locator(author).fill('Thomas');
   await page.locator(send).click();
   await expect(page.locator(toast)).toBeVisible({ timeout: 30_000 });
@@ -101,21 +109,21 @@ test('a page-level report carries the page and no element', async ({ page }) => 
 
 test('Ctrl/Cmd + Enter sends without reaching for the button', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
-  await page.goto(BASE);
+  await activated(page);
 
   await page.locator(badge).click();
-  await page.locator(comment).fill('Envoyé au clavier.');
+  await page.locator(comment).fill('Sent from the keyboard.');
   await page.locator(author).fill('Thomas');
   await page.locator(comment).focus();
   await page.keyboard.press('ControlOrMeta+Enter');
 
   await expect(page.locator(toast)).toBeVisible({ timeout: 30_000 });
   const entries = await received(page);
-  expect(entries[0]!.meta.comment).toBe('Envoyé au clavier.');
+  expect(entries[0]!.meta.comment).toBe('Sent from the keyboard.');
 });
 
 test('the badge stays on top of a host overlay at the maximum z-index', async ({ page }) => {
-  await page.goto(BASE);
+  await activated(page);
   await expect(page.locator(badge)).toBeVisible();
 
   await page.evaluate(() => {
@@ -139,7 +147,7 @@ test('the badge stays on top of a host overlay at the maximum z-index', async ({
 });
 
 test('the cross closes the badge and the shortcut brings it back into a report', async ({ page }) => {
-  await page.goto(BASE);
+  await activated(page);
   await expect(page.locator(badge)).toBeVisible();
 
   await page.locator('[data-prevly="badge-close"]').click();
@@ -158,7 +166,7 @@ test('the cross closes the badge and the shortcut brings it back into a report',
 });
 
 test('the badge can be dragged to another corner and stays there', async ({ page }) => {
-  await page.goto(BASE);
+  await activated(page);
   const wrap = page.locator('.badge-wrap');
   await expect(wrap).toHaveAttribute('data-corner', 'bottom-right');
 
@@ -177,7 +185,7 @@ test('the badge can be dragged to another corner and stays there', async ({ page
 });
 
 test('comes back after a reload once hidden', async ({ page }) => {
-  await page.goto(BASE);
+  await activated(page);
   await expect(page.locator(badge)).toBeVisible();
   await page.evaluate(() => window.__prevlyFeedback?.hide());
   await expect(page.locator(badge)).toHaveCount(0);
@@ -186,6 +194,7 @@ test('comes back after a reload once hidden', async ({ page }) => {
 });
 
 test('is on even on a page reached through a redirect', async ({ page }) => {
+  await activated(page);
   await page.goto(`${BASE}/redirect-me`);
   await expect(page).toHaveURL(`${BASE}/`);
   await expect(page.locator(badge)).toBeVisible();
@@ -193,8 +202,8 @@ test('is on even on a page reached through a redirect', async ({ page }) => {
 
 test('sends the location detail an agent needs', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
-  await page.goto(BASE);
-  await pickAndSend(page, 'Montant faux.');
+  await activated(page);
+  await pickAndSend(page, 'Wrong amount.');
 
   const entries = await received(page);
   const el = entries[0]!.meta.element;
@@ -208,7 +217,7 @@ test('sends the location detail an agent needs', async ({ page }) => {
 });
 
 test('offers a pen and nothing else to fiddle with', async ({ page }) => {
-  await page.goto(BASE);
+  await activated(page);
   await page.locator(badge).click();
   await page.locator('[data-prevly="point"]').click();
   await page.locator('#grand-total').click();
@@ -220,7 +229,7 @@ test('offers a pen and nothing else to fiddle with', async ({ page }) => {
 
 test('keeps generated ids and hashed classes out of the report', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
-  await page.goto(BASE);
+  await activated(page);
   await page.evaluate(() => {
     const cell = document.querySelector('#grand-total') as HTMLElement;
     cell.id = 'react-aria-_R_5klubsnqbb_';
@@ -232,7 +241,7 @@ test('keeps generated ids and hashed classes out of the report', async ({ page }
   await page.locator('[data-prevly="point"]').click();
   await page.locator('#react-aria-_R_5klubsnqbb_').click();
   await expect(page.locator('.canvas-wrap canvas')).toBeVisible({ timeout: 30_000 });
-  await page.locator(comment).fill('Montant faux.');
+  await page.locator(comment).fill('Wrong amount.');
   await page.locator(author).fill('Thomas');
   await page.locator(send).click();
   await expect(page.locator(toast)).toBeVisible({ timeout: 30_000 });
@@ -243,16 +252,33 @@ test('keeps generated ids and hashed classes out of the report', async ({ page }
   expect(payload).not.toContain('data-hovered');
 });
 
-test('captures a 5xx on the page origin and ignores a 404', async ({ page }) => {
+test('without the activation link, the badge renders but reports are locked', async ({ page }) => {
   await page.request.get(`${BASE}/_dev/reset`);
   await page.goto(BASE);
+  await expect(page.locator(badge)).toBeVisible();
+
+  await page.locator(badge).click();
+  await expect(page.locator(lockedMessage)).toBeVisible();
+  await expect(page.locator(lockedMessage)).toContainText('Open this preview from the link');
+  await expect(page.locator(comment)).toHaveCount(0);
+
+  const post = await page.request.post(`${BASE}/_prevly/api/feedback`, {
+    multipart: { meta: { name: 'meta.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ author: 'Thomas', comment: 'x', page: '/' })) } },
+  });
+  expect(post.status()).toBe(401);
+  expect(await received(page)).toHaveLength(0);
+});
+
+test('captures a 5xx on the page origin and ignores a 404', async ({ page }) => {
+  await page.request.get(`${BASE}/_dev/reset`);
+  await activated(page);
   await page.evaluate(async () => {
     await fetch('/_dev/missing').catch(() => undefined);
     await fetch('/_dev/boom?token=secret').catch(() => undefined);
   });
 
   await page.locator(badge).click();
-  await page.locator(comment).fill('Le serveur renvoie une erreur.');
+  await page.locator(comment).fill('The server returns an error.');
   await page.locator(author).fill('Thomas');
   await page.locator(send).click();
   await expect(page.locator(toast)).toBeVisible({ timeout: 30_000 });

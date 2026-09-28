@@ -67,10 +67,11 @@ func (r *Reconciler) updateComment(ctx context.Context, ev *gh.PullRequestEvent)
 	statuses := make([]gh.AppStatus, 0, len(previews))
 	for _, p := range previews {
 		statuses = append(statuses, gh.AppStatus{
-			App:        p.AppName,
-			Status:     p.Status,
-			URL:        liveURL(p),
-			LogExcerpt: p.FailureLog,
+			App:           p.AppName,
+			Status:        p.Status,
+			URL:           liveURL(p),
+			FeedbackToken: p.FeedbackToken,
+			LogExcerpt:    p.FailureLog,
 		})
 	}
 	body := gh.RenderStickyComment(statuses)

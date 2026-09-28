@@ -67,6 +67,7 @@ export function createApp(deps: AppDeps): App {
   let toastTimer = 0;
   let corner: Corner = saved.corner ?? options.position;
   let closed = saved.closed;
+  let locked = false;
 
   function mount(): void {
     if (host) return;
@@ -159,9 +160,10 @@ export function createApp(deps: AppDeps): App {
   }
 
   async function refresh(): Promise<void> {
-    const items = await api.list();
+    const result = await api.list();
+    locked = result.locked;
     if (!pinLayer) return;
-    pinLayer.update(items, currentPage(location));
+    pinLayer.update(result.items, currentPage(location));
     badge?.setCount(pinLayer.count());
   }
 
@@ -224,6 +226,8 @@ export function createApp(deps: AppDeps): App {
       author: options.reporter?.name ?? storage.readAuthor(),
       askAuthor: options.reporter === null,
       allowPick: picked === null,
+      types: options.types,
+      locked,
       onPick: () => startPicking(),
       onCancel: () => closePanel(),
       onSubmit: (input) => submit(input, picked),
@@ -262,6 +266,12 @@ export function createApp(deps: AppDeps): App {
 
     const outcome = await api.submit(meta, input.png);
     if (!outcome.ok) {
+      if (outcome.kind === 'locked') {
+        locked = true;
+        closePanel();
+        openReportPanel(null, null, null);
+        return null;
+      }
       if (outcome.kind === 'rate-limit') {
         return outcome.retryAfter
           ? `${labels.rateLimited} (${labels.retryIn} ${outcome.retryAfter}s)`

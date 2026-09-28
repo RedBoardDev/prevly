@@ -3,6 +3,8 @@
 package model
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"time"
@@ -98,12 +100,29 @@ type Preview struct {
 	// every preview that predates the upgrade.
 	FeedbackEnabled *bool `json:"feedback_enabled,omitempty"`
 
+	// FeedbackToken gates the feedback API and the sticky comment's activation
+	// link: it is generated once at deploy and kept stable across redeploys, so
+	// the link already posted to the pull request keeps working. A preview
+	// stored before this field existed decodes to "" until the reconcile loop's
+	// backfill fills it in.
+	FeedbackToken string `json:"feedback_token,omitempty"`
+
 	FailureLog string `json:"failure_log,omitempty"`
 }
 
 // FeedbackOn reports whether the preview serves the reviewer widget. Unset
 // means on, matching the `.prevly.yml` default.
 func (p *Preview) FeedbackOn() bool { return p.FeedbackEnabled == nil || *p.FeedbackEnabled }
+
+// NewFeedbackToken returns a 32-byte random token, base64url-encoded without
+// padding, used to gate a preview's feedback endpoints.
+func NewFeedbackToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate feedback token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
 // Key returns the stable identity of the preview ("repo/pr/app"), used as the
 // store key.

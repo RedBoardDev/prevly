@@ -45,16 +45,34 @@ func RenderComment(f *model.Feedback, baseDomain, previewURL string) string {
 }
 
 // typeHeading turns a report type into the glyph and word that open the
-// comment. An unknown or missing type reads as a bug, like the widget default.
+// comment. The three built-ins keep their own glyph and name; a missing type
+// reads as a bug, like the widget default. Any other id (a host's own
+// configured type) gets one neutral glyph and its id, capitalized — sanitized
+// like any other reviewer-supplied text, since the id travels from the client.
 func typeHeading(kind string) (string, string) {
 	switch kind {
 	case "design":
 		return "🎨", "Design"
 	case "question":
 		return "❓", "Question"
-	default:
+	case "bug", "":
 		return "🐞", "Bug"
+	default:
+		return "🏷️", sanitize(humanizeTypeID(kind))
 	}
+}
+
+// humanizeTypeID turns a report type id ("feature-request") into a heading
+// ("Feature Request"): hyphens become spaces, each word capitalized.
+func humanizeTypeID(id string) string {
+	words := strings.Split(id, "-")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func networkBody(entries []model.NetworkEntry) string {

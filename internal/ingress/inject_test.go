@@ -332,8 +332,8 @@ func TestRewriteDropsAcceptEncodingForHTML(t *testing.T) {
 	}{
 		{"html navigation", "text/html,application/xhtml+xml,*/*;q=0.8", &fakeInjector{ok: true}, ""},
 		{"uppercase html", "TEXT/HTML", &fakeInjector{ok: true}, ""},
-		{"absent accept", "", &fakeInjector{ok: true}, ""},
-		{"wildcard accept", "*/*", &fakeInjector{ok: true}, ""},
+		{"absent accept", "", &fakeInjector{ok: true}, "br, gzip"},
+		{"wildcard accept", "*/*", &fakeInjector{ok: true}, "br, gzip"},
 		{"rsc payload", "text/x-component", &fakeInjector{ok: true}, "br, gzip"},
 		{"json", "application/json", &fakeInjector{ok: true}, "br, gzip"},
 		{"image", "image/avif,image/webp", &fakeInjector{ok: true}, "br, gzip"},

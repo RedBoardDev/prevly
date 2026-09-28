@@ -66,6 +66,7 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			r.healMissing(ctx, p)
 			continue
 		}
+		r.backfillFeedbackToken(ctx, p)
 		if p.IdleSince(now) {
 			r.sleep(ctx, p)
 		}
@@ -104,6 +105,33 @@ func (r *Reconciler) healMissing(ctx context.Context, p *model.Preview) {
 	}
 	r.publishPreview(ctx, p)
 	r.logger.Info("preview recreated after container loss", "host", p.Host)
+}
+
+// backfillFeedbackToken issues a feedback token for a running or sleeping
+// preview stored before the field existed, then republishes the sticky
+// comment once so its activation link appears. A plain bool added the same
+// way once silently disabled feedback on every live preview instead: this
+// keeps the link working by generating what is missing rather than reading
+// its absence as opt-out.
+func (r *Reconciler) backfillFeedbackToken(ctx context.Context, p *model.Preview) {
+	if p.Status != model.StatusRunning && p.Status != model.StatusSleeping {
+		return
+	}
+	if !p.FeedbackOn() || p.FeedbackToken != "" {
+		return
+	}
+	token, err := model.NewFeedbackToken()
+	if err != nil {
+		r.logger.Error("backfill feedback token", "host", p.Host, "err", err)
+		return
+	}
+	p.FeedbackToken = token
+	if err := r.store.Put(p); err != nil {
+		r.logger.Error("persist backfilled feedback token", "host", p.Host, "err", err)
+		return
+	}
+	r.publishPreview(ctx, p)
+	r.logger.Info("backfilled feedback token", "host", p.Host)
 }
 
 // maybePrune reclaims dangling images and build cache at most once per

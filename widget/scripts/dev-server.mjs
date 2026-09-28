@@ -9,7 +9,25 @@ const devDir = join(root, 'dev');
 const bundle = resolve(root, '../internal/feedback/assets/feedback.js');
 const port = Number(process.env.PORT ?? 4177);
 
+// Mirrors the daemon's per-preview feedback token: not a real secret, just the
+// one value /_prevly/activate accepts in this mock.
+const TOKEN = 'dev-mock-feedback-token';
+
 const store = [];
+
+function parseCookies(header) {
+  const out = {};
+  for (const part of (header ?? '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    out[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+function activated(req) {
+  return parseCookies(req.headers.cookie).prevly_feedback === TOKEN;
+}
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -85,9 +103,9 @@ async function handlePost(req, res) {
   const record = {
     id,
     type: meta.type ?? 'bug',
-    repo: 'akord-securite/KARE',
+    repo: 'acme/shop',
     pr: 1268,
-    app: 'kare',
+    app: 'web',
     page: meta.page,
     author: meta.author,
     comment: meta.comment,
@@ -97,7 +115,7 @@ async function handlePost(req, res) {
     rect: meta.rect ?? null,
     viewport: meta.viewport ?? null,
     created_at: new Date().toISOString(),
-    comment_url: `https://github.com/akord-securite/KARE/pull/1268#issuecomment-${store.length + 1}`,
+    comment_url: `https://github.com/acme/shop/pull/1268#issuecomment-${store.length + 1}`,
     screenshot_url: shotPart ? `/_prevly/feedback/${id}/screenshot.png` : null,
   };
 
@@ -145,20 +163,26 @@ const server = createServer(async (req, res) => {
 
     if (path === '/_prevly/feedback.js') return serveFile(res, bundle);
 
-    // Mirrors the daemon: the flag has to survive the app's own redirects, so
-    // it is a cookie the server sets, never a query parameter.
+    // Mirrors the daemon: the token comes from the query string only once, to
+    // set an HttpOnly cookie scoped to /_prevly/ that gates the API from then
+    // on. A wrong or missing token answers 404, identical to any other
+    // unknown path.
     if (path === '/_prevly/activate') {
-      const to = url.searchParams.get('to');
-      const target = to && to.startsWith('/') && !to.startsWith('//') ? to : '/';
+      if (url.searchParams.get('t') !== TOKEN) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        return res.end('not found');
+      }
       res.writeHead(302, {
-        'Set-Cookie': 'prevly_feedback=1; Path=/; Max-Age=7776000; SameSite=Lax',
+        'Set-Cookie': `prevly_feedback=${TOKEN}; Path=/_prevly/; HttpOnly; SameSite=Strict`,
         'Cache-Control': 'no-store',
-        Location: target,
+        'Referrer-Policy': 'no-referrer',
+        Location: '/',
       });
       return res.end();
     }
 
     if (path === '/_prevly/api/feedback') {
+      if (!activated(req)) return json(res, 401, { error: 'locked' });
       if (req.method === 'GET') {
         return json(res, 200, { items: store.map((entry) => entry.record).reverse() });
       }

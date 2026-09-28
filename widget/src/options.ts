@@ -1,4 +1,7 @@
-export type ReportType = 'bug' | 'design' | 'question';
+// ReportType used to be the closed 'bug' | 'design' | 'question' union; it is
+// now any id from the resolved `types` list, so it is kept as a plain string
+// alias for signature compatibility.
+export type ReportType = string;
 
 export const REPORT_TYPES: readonly ReportType[] = ['bug', 'design', 'question'];
 
@@ -14,7 +17,23 @@ export interface Reporter {
 
 export interface NetworkOptions {
   origins?: string[];
+  // The response header read into the payload's requestId field. x-request-id
+  // is one API's convention, not a standard: a host using x-correlation-id or
+  // traceparent sets this instead. The payload field stays named requestId
+  // regardless of what the header was called.
+  requestIdHeader?: string;
 }
+
+// A report type the host offers in the panel's selector. id travels in the
+// payload's `type` field and must be safe to embed in a URL or a Go switch
+// case; label is what the reviewer sees.
+export interface TypeOption {
+  id: string;
+  label: string;
+}
+
+const TYPE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const MAX_TYPES = 8;
 
 export interface Labels {
   badge: string;
@@ -51,6 +70,7 @@ export interface Labels {
   openReport: string;
   pin: string;
   from: string;
+  locked: string;
 }
 
 export const DEFAULT_LABELS: Labels = {
@@ -88,6 +108,7 @@ export const DEFAULT_LABELS: Labels = {
   openReport: 'open',
   pin: 'Report',
   from: 'from',
+  locked: 'Open this preview from the link in the pull request to send feedback.',
 };
 
 export interface MountOptions {
@@ -99,6 +120,7 @@ export interface MountOptions {
   shortcut?: string;
   network?: NetworkOptions;
   theme?: Theme;
+  types?: TypeOption[];
 }
 
 export interface ResolvedOptions {
@@ -109,24 +131,57 @@ export interface ResolvedOptions {
   position: Corner;
   shortcut: string;
   origins: string[];
+  requestIdHeader: string;
   theme: Theme;
+  types: TypeOption[];
 }
 
 const CONTEXT_LIMITS = { keys: 10, key: 200, value: 200 } as const;
 
 export function resolveOptions(input: MountOptions): ResolvedOptions {
+  const labels = { ...DEFAULT_LABELS, ...cleanLabels(input?.labels) };
   return {
     endpoint: typeof input?.endpoint === 'string' ? input.endpoint : '',
     reporter: reporterOf(input?.reporter),
     context: contextOf(input?.context),
-    labels: { ...DEFAULT_LABELS, ...cleanLabels(input?.labels) },
+    labels,
     position: CORNERS.includes(input?.position as Corner)
       ? (input.position as Corner)
       : 'bottom-right',
     shortcut: shortcutOf(input?.shortcut),
     origins: originsOf(input?.network?.origins),
+    requestIdHeader: requestIdHeaderOf(input?.network?.requestIdHeader),
     theme: input?.theme === 'light' || input?.theme === 'dark' ? input.theme : 'auto',
+    types: typesOf(input?.types, labels),
   };
+}
+
+function defaultTypes(labels: Labels): TypeOption[] {
+  return [
+    { id: 'bug', label: labels.typeBug },
+    { id: 'design', label: labels.typeDesign },
+    { id: 'question', label: labels.typeQuestion },
+  ];
+}
+
+// typesOf validates the host's list and falls back to the default three on
+// anything wrong, rather than throwing: mountFeedback must never throw.
+function typesOf(types: TypeOption[] | undefined, labels: Labels): TypeOption[] {
+  if (!Array.isArray(types) || types.length === 0 || types.length > MAX_TYPES) {
+    return defaultTypes(labels);
+  }
+  const seen = new Set<string>();
+  const out: TypeOption[] = [];
+  for (const entry of types) {
+    const id = entry?.id;
+    const label = entry?.label;
+    if (typeof id !== 'string' || !TYPE_ID_PATTERN.test(id)) return defaultTypes(labels);
+    if (typeof label !== 'string' || !label) return defaultTypes(labels);
+    if (seen.has(id)) return defaultTypes(labels);
+    seen.add(id);
+    out.push({ id, label });
+  }
+  return out;
 }
 
 function reporterOf(reporter: Reporter | undefined): Reporter | null {
@@ -157,6 +212,11 @@ function cleanLabels(labels: Partial<Labels> | undefined): Partial<Labels> {
 function shortcutOf(shortcut: string | undefined): string {
   const key = typeof shortcut === 'string' ? shortcut.trim() : '';
   return key.length === 1 ? key.toLowerCase() : 'f';
+}
+
+function requestIdHeaderOf(header: string | undefined): string {
+  const name = typeof header === 'string' ? header.trim() : '';
+  return name || 'x-request-id';
 }
 
 function originsOf(origins: string[] | undefined): string[] {

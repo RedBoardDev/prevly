@@ -125,7 +125,7 @@ func TestSingleAppNoSubdomainAllowed(t *testing.T) {
 }
 
 const validHostYAML = `
-base_domain: preview.staging.kare-app.fr
+base_domain: preview.staging.example.com
 tls:
   mode: dns-01
   provider: route53
@@ -155,7 +155,7 @@ func TestParseHostConfigValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.BaseDomain != "preview.staging.kare-app.fr" {
+	if cfg.BaseDomain != "preview.staging.example.com" {
 		t.Fatalf("base_domain = %q", cfg.BaseDomain)
 	}
 	if cfg.HTTPSAddr != ":443" {

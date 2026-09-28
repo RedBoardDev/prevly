@@ -120,10 +120,11 @@ func isHTML(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "text/html")
 }
 
+// acceptsHTML reports whether Accept explicitly names text/html, which is what
+// a navigation sends. An empty header or "*/*" (what scripts and a default
+// fetch send) must not match here: matching them made the proxy strip
+// Accept-Encoding from script and API requests too, so Go's transport asked
+// upstream for gzip itself, decoded it, and the browser got uncompressed bytes.
 func acceptsHTML(accept string) bool {
-	accept = strings.TrimSpace(accept)
-	if accept == "" || accept == "*/*" {
-		return true
-	}
 	return strings.Contains(strings.ToLower(accept), "text/html")
 }

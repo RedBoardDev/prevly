@@ -5,6 +5,7 @@ export interface NetworkRecorder {
   entries(): NetworkEntry[];
   origins(): string[];
   setOrigins(origins: string[]): void;
+  setRequestIdHeader(header: string): void;
   stop(): void;
 }
 
@@ -19,6 +20,10 @@ export interface NetworkOptions {
   target?: NetworkTarget;
   base?: string;
   now?: () => Date;
+  // The response header read into the payload's requestId field. x-request-id
+  // is one API's convention, not a standard: a host using x-correlation-id or
+  // traceparent sets this instead.
+  requestIdHeader?: string;
 }
 
 interface Pending {
@@ -27,11 +32,26 @@ interface Pending {
   watched: boolean;
 }
 
+// isAbort reports whether error is the app cancelling its own fetch: an Error
+// or a DOMException (which is not a subclass of Error) carrying that name.
+// Next.js aborts pending RSC and prefetch fetches on every fast navigation:
+// counting those as failures would fill reports with noise the network
+// bounds exist to exclude.
+function isAbort(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error as { name: unknown }).name === 'AbortError'
+  );
+}
+
 export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecorder {
   const limit = options.limit ?? LIMITS.networkEntries;
   const scope = options.target ?? (typeof window !== 'undefined' ? window : ({} as NetworkTarget));
   const base = options.base ?? (typeof location !== 'undefined' ? location.href : 'http://localhost/');
   const now = options.now ?? (() => new Date());
+  let requestIdHeader = options.requestIdHeader || 'x-request-id';
 
   let watched = options.origins?.slice() ?? [];
   const buffer: NetworkEntry[] = [];
@@ -85,7 +105,7 @@ export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecor
         if (pending) {
           let requestId: string | null = null;
           try {
-            requestId = response.headers?.get('x-request-id') ?? null;
+            requestId = response.headers?.get(requestIdHeader) ?? null;
           } catch {
             /* an opaque response exposes no header */
           }
@@ -93,7 +113,7 @@ export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecor
         }
         return response;
       } catch (error) {
-        if (pending) push(pending, 0, null);
+        if (pending && !isAbort(error)) push(pending, 0, null);
         throw error;
       }
     };
@@ -127,7 +147,7 @@ export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecor
           const settle = (status: number): void => {
             let requestId: string | null = null;
             try {
-              requestId = this.getResponseHeader('x-request-id');
+              requestId = this.getResponseHeader(requestIdHeader);
             } catch {
               /* headers unavailable cross-origin */
             }
@@ -136,7 +156,6 @@ export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecor
           this.addEventListener('load', () => settle(this.status));
           this.addEventListener('error', () => settle(0));
           this.addEventListener('timeout', () => settle(0));
-          this.addEventListener('abort', () => settle(0));
         }
       } catch {
         /* the recorder never breaks the host page */
@@ -155,6 +174,9 @@ export function startNetworkRecorder(options: NetworkOptions = {}): NetworkRecor
     origins: () => watched.slice(),
     setOrigins(origins) {
       watched = origins.slice();
+    },
+    setRequestIdHeader(header) {
+      requestIdHeader = header || 'x-request-id';
     },
     stop() {
       while (restores.length) {

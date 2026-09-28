@@ -98,6 +98,7 @@ type fakeGitHub struct {
 	pr         *gh.PullRequestEvent
 
 	comments    int
+	commentBody []string
 	posted      []string
 	postErr     error
 	replies     int
@@ -116,8 +117,9 @@ func (f *fakeGitHub) PullRequest(context.Context, int64, string, string, int) (*
 	return f.pr, nil
 }
 func (f *fakeGitHub) CloneToken(context.Context, int64) (string, error) { return "tok", nil }
-func (f *fakeGitHub) UpsertComment(context.Context, int64, string, string, int, string) (int64, error) {
+func (f *fakeGitHub) UpsertComment(_ context.Context, _ int64, _, _ string, _ int, body string) (int64, error) {
 	f.comments++
+	f.commentBody = append(f.commentBody, body)
 	return 1, nil
 }
 func (f *fakeGitHub) PostComment(_ context.Context, _ int64, _, _ string, _ int, body string) (int64, string, error) {
