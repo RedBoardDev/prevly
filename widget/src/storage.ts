@@ -3,16 +3,11 @@ import { CORNERS } from './options';
 
 const AUTHOR_KEY = 'prevly.feedback.author';
 
-interface BadgeState {
-  corner: Corner | null;
-  closed: boolean;
-}
-
 export interface WidgetStorage {
   readAuthor(): string;
   writeAuthor(value: string): void;
-  readBadge(): BadgeState;
-  writeBadge(state: BadgeState): void;
+  readCorner(): Corner | null;
+  writeCorner(corner: Corner): void;
 }
 
 export function safeStorage(): Storage | null {
@@ -24,7 +19,7 @@ export function safeStorage(): Storage | null {
 }
 
 export function createStorage(store: Storage | null, host: string): WidgetStorage {
-  const badgeKey = `prevly.feedback.badge:${host}`;
+  const cornerKey = `prevly.feedback.corner:${host}`;
 
   return {
     readAuthor() {
@@ -41,22 +36,17 @@ export function createStorage(store: Storage | null, host: string): WidgetStorag
         /* storage unavailable */
       }
     },
-    readBadge() {
+    readCorner() {
       try {
-        const raw = store?.getItem(badgeKey);
-        if (!raw) return { corner: null, closed: false };
-        const parsed = JSON.parse(raw) as { corner?: unknown; closed?: unknown };
-        return {
-          corner: CORNERS.includes(parsed.corner as Corner) ? (parsed.corner as Corner) : null,
-          closed: parsed.closed === true,
-        };
+        const raw = store?.getItem(cornerKey);
+        return CORNERS.includes(raw as Corner) ? (raw as Corner) : null;
       } catch {
-        return { corner: null, closed: false };
+        return null;
       }
     },
-    writeBadge(state) {
+    writeCorner(corner) {
       try {
-        store?.setItem(badgeKey, JSON.stringify({ corner: state.corner, closed: state.closed }));
+        store?.setItem(cornerKey, corner);
       } catch {
         /* storage unavailable */
       }

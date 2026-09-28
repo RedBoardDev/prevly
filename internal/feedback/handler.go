@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -622,9 +623,11 @@ func (s *Service) toJSON(f *model.Feedback) reportJSON {
 		Viewport:  f.Viewport,
 		CreatedAt: f.CreatedAt,
 	}
-	if f.CommentURL != "" {
-		url := f.CommentURL
-		out.CommentURL = &url
+	// The widget links "open on GitHub" from comment_url only: leave a site
+	// report's issue out of it and the reviewer never gets a link to what they
+	// just filed.
+	if link := cmp.Or(f.CommentURL, f.IssueURL); link != "" {
+		out.CommentURL = &link
 	}
 	if f.HasScreenshot {
 		url := s.screenshotURL(f.ID)

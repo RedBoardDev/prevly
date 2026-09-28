@@ -15,8 +15,7 @@ describe('resolveOptions', () => {
       reporter: null,
       context: {},
       position: 'bottom-right',
-      shortcut: 'f',
-      theme: 'auto',
+      theme: 'light',
     });
     expect(resolved.labels).toEqual(DEFAULT_LABELS);
     expect(resolved.origins).toEqual([location.origin]);
@@ -79,11 +78,6 @@ describe('resolveOptions', () => {
     expect(resolveOptions({ endpoint: '/x', reporter: { name: '   ' } }).reporter).toBeNull();
   });
 
-  it('falls back to f for a shortcut that is not a single key', () => {
-    expect(resolveOptions({ endpoint: '/x', shortcut: 'K' }).shortcut).toBe('k');
-    expect(resolveOptions({ endpoint: '/x', shortcut: 'ctrl+k' }).shortcut).toBe('f');
-  });
-
   it('normalises configured origins and drops the unparseable ones', () => {
     const { origins } = resolveOptions({
       endpoint: '/x',
@@ -101,7 +95,12 @@ describe('resolveOptions', () => {
     });
 
     expect(resolved.position).toBe('bottom-right');
-    expect(resolved.theme).toBe('auto');
+    expect(resolved.theme).toBe('light');
+  });
+
+  it('accepts auto and dark, keeping light as the only default', () => {
+    expect(resolveOptions({ endpoint: '/x', theme: 'auto' }).theme).toBe('auto');
+    expect(resolveOptions({ endpoint: '/x', theme: 'dark' }).theme).toBe('dark');
   });
 
   it('defaults the correlation header to x-request-id', () => {

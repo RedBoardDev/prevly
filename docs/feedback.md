@@ -58,9 +58,10 @@ so the activation link appears — the same care `FeedbackEnabled` already
 needed, since a plain `bool` added the same way once silently turned feedback
 off for every live preview instead of reading its zero value as "unset".
 
-The badge carries a cross that closes it; the choice is remembered per host in
-`localStorage` and `Ctrl`/`Cmd` + `F` brings it back, straight into a report.
-The widget package itself knows nothing about any of this: from its point of
+The badge carries a cross that closes it for the current page only — nothing
+is persisted, so a reload always brings it back; there is no keyboard
+shortcut to do it another way. The widget package itself knows nothing about
+any of this: from its point of
 view a `401` on its configured endpoint means *locked*, full stop — see
 [`widget-package.md`](./widget-package.md#locked).
 
