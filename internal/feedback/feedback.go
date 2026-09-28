@@ -7,9 +7,11 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/config"
+	gh "github.com/RedBoardDev/prevly/internal/github"
 	applog "github.com/RedBoardDev/prevly/internal/log"
 	"github.com/RedBoardDev/prevly/internal/model"
 	"github.com/RedBoardDev/prevly/internal/store"
@@ -22,6 +24,8 @@ const scriptTag = `<script src="/_prevly/feedback.js" defer></script>`
 // GitHub is the subset of the GitHub App the feedback service needs.
 type GitHub interface {
 	PostComment(ctx context.Context, installationID int64, owner, repo string, pr int, body string) (id int64, url string, err error)
+	FindInstallation(ctx context.Context, owner, repo string) (int64, error)
+	CreateSiteIssue(ctx context.Context, installationID int64, owner, repo, marker string, since time.Time, r gh.SiteReport) (gh.CreateIssueResult, error)
 }
 
 // Deps are the service's collaborators.
@@ -33,6 +37,9 @@ type Deps struct {
 	DataDir    string
 	Logger     *applog.Logger
 	Now        func() time.Time
+	// SiteKeys maps a configured site's name to its resolved shared secret
+	// (see ResolveSiteKeys), read once at daemon start.
+	SiteKeys map[string]string
 }
 
 // Service implements ingress.Injector and serves the feedback endpoints.
@@ -45,6 +52,11 @@ type Service struct {
 	logger     *applog.Logger
 	now        func() time.Time
 	limiter    *limiter
+
+	sites map[string]siteConfig
+
+	instMu    sync.Mutex
+	instCache map[string]int64 // "owner/name" -> installation id
 }
 
 // New builds a Service. Screenshots live under <DataDir>/feedback.
@@ -52,6 +64,10 @@ func New(d Deps) *Service {
 	now := d.Now
 	if now == nil {
 		now = time.Now
+	}
+	sites := make(map[string]siteConfig, len(d.Config.Sites))
+	for _, sc := range d.Config.Sites {
+		sites[sc.Name] = siteConfig{cfg: sc, key: d.SiteKeys[sc.Name]}
 	}
 	return &Service{
 		store:      d.Store,
@@ -62,6 +78,8 @@ func New(d Deps) *Service {
 		logger:     d.Logger,
 		now:        now,
 		limiter:    newLimiter(d.Config.MaxPerHour, now),
+		sites:      sites,
+		instCache:  map[string]int64{},
 	}
 }
 

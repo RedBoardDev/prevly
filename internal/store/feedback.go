@@ -62,9 +62,30 @@ func (s *Store) ListFeedbackByHost(host string) ([]*model.Feedback, error) {
 	return out, nil
 }
 
-// ListFeedbackUnposted returns the records whose PR comment was never created.
+// ListFeedbackUnposted returns the records that never reached their GitHub
+// destination (a PR comment for a preview report, an issue for a site one).
 func (s *Store) ListFeedbackUnposted() ([]*model.Feedback, error) {
-	return s.listFeedback(func(f *model.Feedback) bool { return f.CommentID == 0 })
+	return s.listFeedback(func(f *model.Feedback) bool { return !f.Posted() })
+}
+
+// DeleteFeedback removes one record by its id. Missing ids are not an error.
+// Used for site reports, which have no teardown to delete them like a
+// preview's do: the retention sweep deletes them directly instead.
+func (s *Store) DeleteFeedback(id string) error {
+	suffix := []byte("#" + id)
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(feedbackBucket)
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			if bytes.HasSuffix(k, suffix) {
+				return b.Delete(k)
+			}
+		}
+		return nil
+	})
 }
 
 // DeleteFeedbackByPreview removes every record of one preview. Screenshot files

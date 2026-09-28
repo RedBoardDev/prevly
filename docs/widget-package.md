@@ -32,7 +32,7 @@ widget.unmount();
 | `endpoint` | required | Where reports are sent, and where existing ones are listed. Same origin. |
 | `reporter` | `undefined` | `{ name }` when the host knows who is reporting. Undefined makes the widget ask once and remember the answer. |
 | `context` | `{}` | Opaque key/value pairs echoed back in the payload. The host uses it for whatever its server needs. Values are strings, at most 10 keys, each ≤ 200 characters. |
-| `labels` | English | Every visible string, so the host can translate. |
+| `labels` | English, or French on a page tagged `fr`/`fr-*` | Every visible string, so the host can translate. Picked automatically from `document.documentElement.lang` (anything else falls back to English); an explicit key here still overrides the picked locale. |
 | `position` | `'bottom-right'` | Starting corner. The reviewer can drag it elsewhere and that wins. |
 | `shortcut` | `'f'` | Pressed with the platform modifier, starts a report. It also brings the badge back after it was closed. |
 | `network` | `{ origins: [] }` | Origins whose failed requests are captured. Empty means the page's own origin. `network.requestIdHeader` (default `'x-request-id'`) is the response header read into the payload's `requestId` field — `x-request-id` is one API's convention, not a standard, so a host using `x-correlation-id` or `traceparent` sets this instead. The payload field stays named `requestId` regardless. |
@@ -42,6 +42,25 @@ widget.unmount();
 `mountFeedback` never throws and never returns null: a browser that cannot
 support it gets an inert handle. The handle also carries `open()`, which
 reveals the badge and opens the panel, the same thing the shortcut does.
+
+## Loading as a script
+
+The package doesn't have to be installed: prevly serves the exact same bundle,
+built as an IIFE, at `/_prevly/feedback.js` — self-mounted, so nothing else is
+needed. A host application (typically a [site](./feedback.md#sites)) can load
+it directly instead of adding the npm dependency:
+
+```html
+<script src="https://<prevly base>/_prevly/feedback.js" data-endpoint="/api/prevly-feedback" defer></script>
+```
+
+`data-endpoint` is read once, synchronously, from the script tag itself
+(`document.currentScript`, which is only non-null while the script first
+executes) and must be a same-origin path starting with `/` — `//host/path` is
+protocol-relative, not same-origin, and is rejected the same as any absolute
+URL. Anything invalid or absent falls back to `/_prevly/api/feedback`, the
+same default prevly's own injected script uses. Every other `mountFeedback`
+option keeps its default.
 
 The fetch and `XMLHttpRequest` wrappers are installed by the first
 `mountFeedback` call, not by importing the package: the package declares

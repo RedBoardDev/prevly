@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -70,17 +71,60 @@ type PerPreview struct {
 }
 
 // FeedbackConfig configures the in-preview feedback widget: script injection,
-// the API served on preview hosts, and the screenshots kept on disk.
+// the API served on preview hosts, the screenshots kept on disk, and any
+// long-lived sites relaying reports server-side.
 type FeedbackConfig struct {
 	// Enabled is a pointer so an explicit `false` is distinguishable from an
 	// omitted key, which defaults to true.
-	Enabled    *bool    `yaml:"enabled"`
-	Retention  Duration `yaml:"retention"`
-	MaxPerHour int      `yaml:"max_per_hour"`
+	Enabled    *bool        `yaml:"enabled"`
+	Retention  Duration     `yaml:"retention"`
+	MaxPerHour int          `yaml:"max_per_hour"`
+	Sites      []SiteConfig `yaml:"sites"`
 }
 
 // On reports whether feedback is enabled (the default when the key is absent).
 func (f FeedbackConfig) On() bool { return f.Enabled == nil || *f.Enabled }
+
+// siteNameRe bounds a site's name: it travels in a URL path segment.
+var siteNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// SiteConfig configures one long-lived, non-preview environment (a staging, a
+// demo) whose own application relays feedback reports to prevly server-side
+// and gets each one turned into a GitHub issue. Its gate is a shared secret
+// only the site's own server knows: KeyEnv names the env var holding it, never
+// the value itself.
+type SiteConfig struct {
+	Name      string   `yaml:"name"`
+	Repo      string   `yaml:"repo"`
+	Labels    []string `yaml:"labels"`
+	IssueType string   `yaml:"issue_type"`
+	KeyEnv    string   `yaml:"key_env"`
+}
+
+// validate checks the sites list on its own (name pattern, uniqueness,
+// "owner/name" repo shape, a key_env named); it does not read the env var
+// itself, since that check needs to name the missing variable at daemon
+// start, not at config parse time.
+func (f FeedbackConfig) validateSites() error {
+	seen := make(map[string]bool, len(f.Sites))
+	for _, s := range f.Sites {
+		if !siteNameRe.MatchString(s.Name) {
+			return fmt.Errorf("feedback.sites: name %q must match ^[a-z0-9][a-z0-9-]{0,31}$", s.Name)
+		}
+		if seen[s.Name] {
+			return fmt.Errorf("feedback.sites: duplicate site name %q", s.Name)
+		}
+		seen[s.Name] = true
+		owner, name, ok := strings.Cut(s.Repo, "/")
+		if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+			return fmt.Errorf("feedback.sites: repo %q must be \"owner/name\"", s.Repo)
+		}
+		if s.KeyEnv == "" {
+			return fmt.Errorf("feedback.sites: key_env is required for site %q", s.Name)
+		}
+	}
+	return nil
+}
 
 // Defaults provide fallbacks for lifecycle values omitted in `.prevly.yml`.
 type Defaults struct {
@@ -181,6 +225,9 @@ func (c *HostConfig) Validate() error {
 	}
 	if c.Feedback.MaxPerHour < 0 {
 		return fmt.Errorf("feedback.max_per_hour must be positive")
+	}
+	if err := c.Feedback.validateSites(); err != nil {
+		return err
 	}
 	// The GitHub App is optional in config: when app_id is unset the daemon
 	// creates one through the in-daemon setup flow and persists it under

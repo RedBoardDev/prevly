@@ -42,7 +42,18 @@ defaults:
 
 feedback:                          # in-preview reviewer widget -> PR comments
   enabled: true                    # false disables injection and the API
-  retention: 90d                   # how long screenshot files are kept on disk
-  max_per_hour: 30                 # reports accepted per preview host per hour
+  retention: 90d                   # how long screenshot files (and site reports) are kept
+  max_per_hour: 30                 # reports accepted per preview host (or per site) per hour
+
+  # sites: long-lived environments (a staging, a demo) that prevly does not
+  # proxy. The site's own application loads the widget (from npm, or as a
+  # script from prevly) and relays reports to prevly server-side; each one
+  # becomes a GitHub issue instead of a PR comment. See docs/feedback.md.
+  # sites:
+  #   - name: staging                       # ^[a-z0-9][a-z0-9-]{0,31}$, unique
+  #     repo: acme/shop                     # owner/name, issues are filed here
+  #     labels: [feedback/staging]          # optional, added to every issue
+  #     issue_type: Draft                   # optional GitHub issue type
+  #     key_env: PREVLY_SITE_STAGING_KEY    # env var holding the shared secret
 
 data_dir: /var/lib/prevly          # bbolt state + certs

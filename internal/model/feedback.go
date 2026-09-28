@@ -86,13 +86,31 @@ type Feedback struct {
 	Context       map[string]string `json:"context,omitempty"`
 	HasScreenshot bool              `json:"screenshot"`
 
+	// Site is set for a report relayed by a site's own server instead of
+	// captured on a preview; Repo/PRNumber/AppName/Host are empty for it.
+	Site string `json:"site,omitempty"`
+
 	CommentID    int64  `json:"comment_id"`
 	CommentURL   string `json:"comment_url,omitempty"`
+	IssueNumber  int64  `json:"issue_number,omitempty"`
+	IssueURL     string `json:"issue_url,omitempty"`
 	PostAttempts int    `json:"post_attempts,omitempty"`
+}
+
+// Posted reports whether the report already reached its GitHub destination: a
+// PR comment for a preview report, an issue for a site one.
+func (f *Feedback) Posted() bool {
+	if f.Site != "" {
+		return f.IssueNumber != 0
+	}
+	return f.CommentID != 0
 }
 
 // Key returns the store key of the feedback record.
 func (f *Feedback) Key() string {
+	if f.Site != "" {
+		return SiteFeedbackKey(f.Site, f.ID)
+	}
 	return FeedbackKey(f.Repo, f.PRNumber, f.AppName, f.ID)
 }
 
@@ -100,6 +118,12 @@ func (f *Feedback) Key() string {
 // time-ordered, so records of one preview iterate oldest first.
 func FeedbackKey(repo string, pr int, app, id string) string {
 	return fmt.Sprintf("%s#%d#%s#%s", repo, pr, app, id)
+}
+
+// SiteFeedbackKey builds the store key of a site report. Sites have no
+// repo/pr/app triple, so the key is namespaced by the site's own name instead.
+func SiteFeedbackKey(site, id string) string {
+	return fmt.Sprintf("site#%s#%s", site, id)
 }
 
 // FeedbackPreviewPrefix is the key prefix covering every feedback record of one

@@ -117,6 +117,10 @@ func (s *Service) ControlHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /_prevly/feedback.js", s.serveScript)
 	mux.HandleFunc("GET /_prevly/feedback/{id}/screenshot.png", s.serveScreenshot)
+	mux.HandleFunc("POST /_prevly/sites/{site}/api/feedback", s.createSiteReport)
+	// GET answers 404, not 405: a site has no pin list, which the widget
+	// contract reads as "no pins, not locked" rather than "locked".
+	mux.HandleFunc("GET /_prevly/sites/{site}/api/feedback", notFound)
 	mux.HandleFunc("/_prevly/", notFound)
 	return mux
 }
@@ -584,6 +588,7 @@ type reportJSON struct {
 	Repo          string          `json:"repo"`
 	PR            int             `json:"pr"`
 	App           string          `json:"app"`
+	Site          string          `json:"site,omitempty"`
 	Page          string          `json:"page"`
 	Author        string          `json:"author"`
 	Comment       string          `json:"comment"`
@@ -605,6 +610,7 @@ func (s *Service) toJSON(f *model.Feedback) reportJSON {
 		Repo:      f.Repo,
 		PR:        f.PRNumber,
 		App:       f.AppName,
+		Site:      f.Site,
 		Page:      f.Page,
 		Author:    f.Author,
 		Comment:   f.Comment,

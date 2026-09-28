@@ -215,6 +215,117 @@ other reviewer-supplied text, since the id travels from the client.
 
 Nothing is added to the sticky comment: the widget is already there.
 
+## Sites
+
+Not every environment is a preview: a staging or a demo runs continuously and
+prevly does not proxy it. A site's own application mounts the widget itself
+and relays each report to prevly **server-side**; prevly turns it into a
+**GitHub issue** instead of a PR comment. Nobody performs an activation step —
+the gate is a shared secret only the site's own server knows.
+
+### Config
+
+```yaml
+feedback:
+  sites:
+    - name: staging                 # ^[a-z0-9][a-z0-9-]{0,31}$, unique
+      repo: acme/shop               # owner/name
+      labels: [feedback/staging]    # optional
+      issue_type: Draft             # optional GitHub issue type
+      key_env: PREVLY_SITE_STAGING_KEY   # env var holding the shared secret
+```
+
+`key_env` never holds the secret inline: it names the environment variable the
+daemon reads it from at startup. A configured site whose env var is empty or
+shorter than 32 characters is a fatal error at daemon start, naming the
+variable and never its value.
+
+### Route
+
+`POST https://<base>/_prevly/sites/<site>/api/feedback` on the base domain,
+the same multipart body, bounds and validation as a preview's
+`POST /_prevly/api/feedback` (see above). `GET` on the same path always
+answers 404 — a site has no pin list, which the widget contract reads as "no
+pins, not locked", not as "locked".
+
+Auth is the `X-Prevly-Site-Key` header, compared to the site's secret in
+constant time. An unknown site, a missing key and a wrong key all answer the
+same 404, so the endpoint reveals nothing to a guess; a wrong key is logged
+with the site's name only, never the key. The existing per-host rate limit
+applies, keyed per site.
+
+### What the host application must do
+
+Relay the widget's POST **server-side**, adding the header: the shared secret
+must never reach the browser.
+
+```ts
+// app/api/prevly-feedback/route.ts (Next.js route handler)
+export async function POST(request: Request) {
+  const upstream = await fetch('https://<prevly base>/_prevly/sites/staging/api/feedback', {
+    method: 'POST',
+    headers: {
+      'Content-Type': request.headers.get('content-type') ?? '',
+      'X-Prevly-Site-Key': process.env.PREVLY_SITE_STAGING_KEY!,
+    },
+    body: request.body,
+    duplex: 'half',
+  });
+  return new Response(upstream.body, { status: upstream.status });
+}
+```
+
+Load the widget from prevly as a plain script pointed at that relay — no npm
+dependency required (see
+[`widget-package.md`](./widget-package.md#loading-as-a-script)):
+
+```html
+<script src="https://<prevly base>/_prevly/feedback.js" data-endpoint="/api/prevly-feedback" defer></script>
+```
+
+or, mounting it programmatically instead:
+
+```ts
+import { mountFeedback } from 'prevly-feedback-widget';
+
+mountFeedback({ endpoint: '/api/prevly-feedback' });
+```
+
+prevly has no session on a site and trusts `author` as posted, exactly as it
+does on a preview; a site behind a login should supply `reporter: { name }`
+so the widget never asks.
+
+### Issue body
+
+Same compact, folded layout as a PR comment: the reviewer's words above the
+fold, screenshot, location table, console and network folded below it. Since a
+site is reachable by anyone who can reach the host application — never gated
+by an activation link the way a preview is — **every reviewer-supplied string
+is made inert** before it enters markdown: an `@mention`, a bare `#123`
+reference, `GH-123` and `owner/repo#123` are all broken with a zero-width
+space, `![` becomes `!` + zero-width space + `[`, and `<`/`>` are escaped. The
+title is the comment's first line, at most 80 characters, made inert the same
+way.
+
+Labels are the site's configured `labels` plus the report's `type`; the GitHub
+issue type is the site's `issue_type` when configured. GitHub silently drops
+labels or the type when the App lacks push access on the repo — the issue is
+still created, and the daemon logs an error naming what was dropped. A
+400/422 caused by the type field is retried once without it; a
+401/403/404/429 is never retried.
+
+Retrying a report that timed out reuses the issue it already created: the
+body carries `<!-- prevly-site-report:<id> -->`, and a retry looks for that
+marker via the strongly-consistent issue list — never the search API, whose
+index lags too far behind a retry that follows a timeout by seconds — before
+creating a new one.
+
+### Retention
+
+A site report has no teardown to delete it on, unlike a preview's: the
+reconcile tick deletes site records (and their screenshot file) once they
+pass `feedback.retention`, the same window a preview's screenshots use.
+
 ## Storage
 
 bbolt bucket `feedback`, key `<repo>#<pr>#<app>#<id>` (id is Crockford base32
@@ -242,8 +353,9 @@ loop.
 ```yaml
 feedback:
   enabled: true        # default true; false disables injection and the API
-  retention: 90d       # screenshot files
-  max_per_hour: 30     # POSTs per preview host
+  retention: 90d       # screenshot files, and site reports (see Sites)
+  max_per_hour: 30     # POSTs per preview host, or per site
+  sites: []            # long-lived, non-preview environments — see Sites, above
 ```
 
 Repo config (`.prevly.yml`): `feedback: false` opts a repo out (default true).

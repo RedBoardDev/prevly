@@ -13,10 +13,12 @@ import (
 // stored but unposted.
 const maxPostAttempts = 5
 
-// Tick retries the PR comments that never landed and sweeps screenshot files
-// past the retention window. Called once per reconcile interval.
+// Tick retries the PR comments and site issues that never landed, sweeps
+// expired site records, and sweeps screenshot files past the retention
+// window. Called once per reconcile interval.
 func (s *Service) Tick(ctx context.Context) {
 	s.retryComments(ctx)
+	s.sweepSiteReports()
 	s.sweepScreenshots()
 }
 
@@ -30,6 +32,10 @@ func (s *Service) retryComments(ctx context.Context) {
 		if f.PostAttempts >= maxPostAttempts || ctx.Err() != nil {
 			continue
 		}
+		if f.Site != "" {
+			s.retrySiteIssue(ctx, f)
+			continue
+		}
 		previewURL := "https://" + f.Host
 		if p, err := s.store.Get(f.Repo, f.PRNumber, f.AppName); err == nil && p != nil && p.URL != "" {
 			previewURL = p.URL
@@ -37,6 +43,48 @@ func (s *Service) retryComments(ctx context.Context) {
 		postCtx, cancel := context.WithTimeout(ctx, postTimeout)
 		s.postComment(postCtx, f, previewURL)
 		cancel()
+	}
+}
+
+func (s *Service) retrySiteIssue(ctx context.Context, f *model.Feedback) {
+	site, ok := s.sites[f.Site]
+	if !ok {
+		s.logger.Warn("site report retry: site no longer configured", "id", f.ID, "site", f.Site)
+		f.PostAttempts = maxPostAttempts
+		s.persist(f)
+		return
+	}
+	postCtx, cancel := context.WithTimeout(ctx, postTimeout)
+	defer cancel()
+	s.postSiteIssue(postCtx, f, site.cfg)
+}
+
+// sweepSiteReports deletes site report records, and their screenshot file,
+// once they are older than the retention window: a site has no teardown to do
+// this for it the way a preview's does.
+func (s *Service) sweepSiteReports() {
+	retention := s.cfg.Retention.Std()
+	if retention <= 0 {
+		return
+	}
+	records, err := s.store.ListFeedback()
+	if err != nil {
+		s.logger.Error("list feedback for site sweep", "err", err)
+		return
+	}
+	cutoff := s.now().Add(-retention)
+	for _, f := range records {
+		if f.Site == "" || f.CreatedAt.After(cutoff) {
+			continue
+		}
+		if f.HasScreenshot {
+			if err := os.Remove(s.screenshotPath(f.ID)); err != nil && !os.IsNotExist(err) {
+				s.logger.Warn("remove site screenshot", "id", f.ID, "err", err)
+			}
+		}
+		if err := s.store.DeleteFeedback(f.ID); err != nil {
+			s.logger.Error("delete site feedback", "id", f.ID, "err", err)
+		}
 	}
 }
 

@@ -138,6 +138,10 @@ func runNormal(ctx context.Context, logger *applog.Logger, cfg *config.HostConfi
 
 	var fb *feedback.Service
 	if cfg.Feedback.On() {
+		siteKeys, err := feedback.ResolveSiteKeys(cfg.Feedback.Sites, os.Getenv)
+		if err != nil {
+			return err
+		}
 		fb = feedback.New(feedback.Deps{
 			Store:      st,
 			GitHub:     ghc,
@@ -145,6 +149,7 @@ func runNormal(ctx context.Context, logger *applog.Logger, cfg *config.HostConfi
 			BaseDomain: cfg.BaseDomain,
 			DataDir:    cfg.DataDir,
 			Logger:     logger,
+			SiteKeys:   siteKeys,
 		})
 	}
 
