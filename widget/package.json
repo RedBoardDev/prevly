@@ -1,14 +1,37 @@
 {
-  "name": "@prevly/feedback-widget",
+  "name": "prevly-feedback-widget",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Preview feedback widget injected by the prevly daemon.",
+  "license": "MIT",
+  "description": "In-page feedback widget: a reviewer points at something, writes a sentence, and it is POSTed to an endpoint you choose.",
+  "keywords": ["feedback", "widget", "preview", "review", "annotation", "bug-report"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RedBoardDev/prevly.git",
+    "directory": "widget"
+  },
+  "homepage": "https://github.com/RedBoardDev/prevly/blob/main/docs/widget-package.md",
+  "bugs": { "url": "https://github.com/RedBoardDev/prevly/issues" },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit && vitest run",
     "dev": "node scripts/build.mjs && node scripts/dev-server.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "prepack": "node scripts/build.mjs"
   },
   "dependencies": {
     "@medv/finder": "^4.0.2",

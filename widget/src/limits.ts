@@ -12,6 +12,12 @@ export const LIMITS = {
   pathDepth: 20,
   consoleEntries: 20,
   consoleMessage: 500,
+  networkEntries: 5,
+  networkPath: 200,
+  requestId: 100,
+  contextKeys: 10,
+  contextKey: 200,
+  contextValue: 200,
 } as const;
 
 export function clamp(value: string, max: number): string {

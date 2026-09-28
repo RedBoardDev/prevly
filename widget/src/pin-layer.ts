@@ -1,4 +1,5 @@
 import { el } from './dom';
+import type { Labels } from './options';
 import { resolvePins } from './pins';
 import type { NumberedItem, PinTarget } from './pins';
 import { relativeTime } from './time';
@@ -14,7 +15,7 @@ export interface PinLayer {
   destroy(): void;
 }
 
-export function createPinLayer(layer: HTMLElement, host: Element): PinLayer {
+export function createPinLayer(layer: HTMLElement, host: Element, labels: Labels): PinLayer {
   const container = el('div', { class: 'pin-container' });
   layer.append(container);
 
@@ -91,7 +92,7 @@ export function createPinLayer(layer: HTMLElement, host: Element): PinLayer {
       class: 'pin',
       attrs: {
         type: 'button',
-        'aria-label': `Feedback ${target.n} from ${target.item.author}`,
+        'aria-label': `${labels.pin} ${target.n} ${labels.from} ${target.item.author}`,
         'data-prevly-pin': target.item.id,
       },
       on: {
@@ -113,7 +114,7 @@ export function createPinLayer(layer: HTMLElement, host: Element): PinLayer {
     const item = target.item;
     const node = el(
       'div',
-      { class: 'popover', attrs: { role: 'dialog', 'aria-label': `Feedback ${target.n}` } },
+      { class: 'popover', attrs: { role: 'dialog', 'aria-label': `${labels.pin} ${target.n}` } },
       el(
         'div',
         {},
@@ -123,7 +124,7 @@ export function createPinLayer(layer: HTMLElement, host: Element): PinLayer {
       el('div', { class: 'body', text: item.comment }),
       item.comment_url
         ? el('a', {
-            text: 'GitHub',
+            text: labels.openReport,
             attrs: { href: item.comment_url, target: '_blank', rel: 'noreferrer noopener' },
           })
         : null,

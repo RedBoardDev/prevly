@@ -7,7 +7,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"strings"
 
@@ -74,15 +73,6 @@ func (c *RepoConfig) App(name string) (AppConfig, bool) {
 		}
 	}
 	return AppConfig{}, false
-}
-
-// LoadRepoConfig reads and validates a `.prevly.yml` from disk.
-func LoadRepoConfig(file string) (*RepoConfig, error) {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("read repo config: %w", err)
-	}
-	return ParseRepoConfig(data)
 }
 
 // ParseRepoConfig parses and validates a `.prevly.yml` from bytes.

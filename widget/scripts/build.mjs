@@ -1,26 +1,50 @@
 import { build } from 'esbuild';
-import { mkdir, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, rm, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
+const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outfile = resolve(root, '../internal/feedback/assets/feedback.js');
+const embedOut = resolve(root, '../internal/feedback/assets/feedback.js');
+const libOut = resolve(root, 'dist/index.js');
 
-await mkdir(dirname(outfile), { recursive: true });
-
-await build({
-  entryPoints: [resolve(root, 'src/index.ts')],
-  outfile,
+const shared = {
   bundle: true,
-  format: 'iife',
   target: 'es2020',
   platform: 'browser',
   minify: true,
   sourcemap: false,
   legalComments: 'none',
   logLevel: 'info',
+};
+
+await mkdir(dirname(embedOut), { recursive: true });
+await rm(resolve(root, 'dist'), { recursive: true, force: true });
+
+await build({
+  ...shared,
+  entryPoints: [resolve(root, 'src/embed.ts')],
+  outfile: embedOut,
+  format: 'iife',
   banner: { js: '/* prevly preview feedback widget */' },
 });
 
-const { size } = await stat(outfile);
-console.log(`feedback.js: ${(size / 1024).toFixed(1)} kB (${size} bytes)`);
+await build({
+  ...shared,
+  entryPoints: [resolve(root, 'src/index.ts')],
+  outfile: libOut,
+  format: 'esm',
+});
+
+await run('npx', ['tsc', '-p', 'tsconfig.build.json'], { cwd: root });
+
+for (const [label, file] of [
+  ['feedback.js', embedOut],
+  ['dist/index.js', libOut],
+  ['dist/index.d.ts', resolve(root, 'dist/index.d.ts')],
+]) {
+  const { size } = await stat(file);
+  console.log(`${label}: ${(size / 1024).toFixed(1)} kB (${size} bytes)`);
+}

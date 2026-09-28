@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -478,3 +479,100 @@ func TestControlHandlerHasNoAPI(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+func metaWith(t *testing.T, extra map[string]any) string {
+	t.Helper()
+	var base map[string]any
+	if err := json.Unmarshal([]byte(validMeta()), &base); err != nil {
+		t.Fatalf("base meta: %v", err)
+	}
+	for key, value := range extra {
+		base[key] = value
+	}
+	raw, err := json.Marshal(base)
+	if err != nil {
+		t.Fatalf("marshal meta: %v", err)
+	}
+	return string(raw)
+}
+
+func TestCreateDefaultsTypeToBug(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, defaultConfig())
+
+	rec := post(t, f.svc.PreviewHandler(), previewHost, validMeta(), nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
+	}
+	if got := decodeItem(t, rec.Body.Bytes())["type"]; got != "bug" {
+		t.Fatalf("type = %v, want bug", got)
+	}
+	if !strings.Contains(f.gh.last(), "### 🐞 Bug ·") {
+		t.Fatalf("comment heading missing the type:\n%s", f.gh.last())
+	}
+}
+
+func TestCreateStoresTypeContextAndNetwork(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, defaultConfig())
+
+	meta := metaWith(t, map[string]any{
+		"type":    "design",
+		"context": map[string]string{"stage": "staging"},
+		"network": []map[string]any{
+			{"method": "GET", "path": "/rs/v1/reports", "status": 503, "requestId": "req-1", "at": "2026-09-21T10:12:33Z"},
+		},
+	})
+	rec := post(t, f.svc.PreviewHandler(), previewHost, meta, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
+	}
+
+	body := f.gh.last()
+	for _, want := range []string{
+		"### 🎨 Design ·",
+		"| stage | `staging` |",
+		"<details><summary>Network (1 failed request)</summary>",
+		"GET /rs/v1/reports 503 x-request-id=req-1",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("comment missing %q:\n%s", want, body)
+		}
+	}
+
+	stored, err := f.store.ListFeedbackByHost(previewHost)
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("stored = %d, err = %v", len(stored), err)
+	}
+	if stored[0].Type != "design" || stored[0].Context["stage"] != "staging" || len(stored[0].Network) != 1 {
+		t.Fatalf("record lost the new fields: %+v", stored[0])
+	}
+}
+
+func TestCreateRejectsOutOfBoundsExtras(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, defaultConfig())
+
+	tooManyKeys := map[string]string{}
+	for i := 0; i < 11; i++ {
+		tooManyKeys[fmt.Sprintf("k%d", i)] = "v"
+	}
+	network := make([]map[string]any, 0, 6)
+	for i := 0; i < 6; i++ {
+		network = append(network, map[string]any{"method": "GET", "path": "/a", "status": 500})
+	}
+
+	cases := map[string]string{
+		"unknown type":     metaWith(t, map[string]any{"type": "praise"}),
+		"context keys":     metaWith(t, map[string]any{"context": tooManyKeys}),
+		"context value":    metaWith(t, map[string]any{"context": map[string]string{"k": strings.Repeat("v", 201)}}),
+		"network entries":  metaWith(t, map[string]any{"network": network}),
+		"network path len": metaWith(t, map[string]any{"network": []map[string]any{{"method": "GET", "path": "/" + strings.Repeat("a", 200), "status": 500}}}),
+	}
+	for name, meta := range cases {
+		rec := post(t, f.svc.PreviewHandler(), previewHost, meta, nil)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d body = %s", name, rec.Code, rec.Body)
+		}
+	}
+}

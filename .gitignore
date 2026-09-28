@@ -20,6 +20,7 @@
 # Internal handoff docs (kept local, not published)
 /docs/*
 !/docs/feedback.md
+!/docs/widget-package.md
 /spec.md
 
 # Local tooling / agent files (not published)

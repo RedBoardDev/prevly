@@ -1,4 +1,5 @@
 import { el } from './dom';
+import type { Labels } from './options';
 import { elementLabel, elementText } from './selector';
 import type { Point, Rect } from './types';
 
@@ -16,12 +17,12 @@ export interface Picker {
 
 const SUPPRESSED = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'contextmenu'];
 
-export function createPicker(layer: HTMLElement): Picker {
+export function createPicker(layer: HTMLElement, labels: Labels): Picker {
   const outline = el('div', { class: 'outline', attrs: { hidden: '' } });
   const label = el('div', { class: 'outline-label', attrs: { hidden: '' } });
   const hint = el('div', {
     class: 'picker-hint',
-    text: 'Click the element to report · Esc to cancel',
+    text: labels.pickerHint,
     attrs: { hidden: '' },
   });
   layer.append(outline, label, hint);

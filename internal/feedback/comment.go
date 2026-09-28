@@ -20,8 +20,9 @@ func commentMarker(id string) string { return "<!-- prevly-feedback:" + id + " -
 func RenderComment(f *model.Feedback, baseDomain, previewURL string) string {
 	var b strings.Builder
 	b.WriteString(commentMarker(f.ID) + "\n")
-	fmt.Fprintf(&b, "### 💬 %s · `%s` · [%s](<%s>)\n\n",
-		sanitize(f.Author), sanitize(f.AppName), sanitize(f.Page), previewURL+f.Page)
+	glyph, kind := typeHeading(f.Type)
+	fmt.Fprintf(&b, "### %s %s · %s · `%s` · [%s](<%s>)\n\n",
+		glyph, kind, sanitize(f.Author), sanitize(f.AppName), sanitize(f.Page), previewURL+f.Page)
 	b.WriteString(quote(f.Comment) + "\n")
 
 	if f.HasScreenshot {
@@ -35,7 +36,44 @@ func RenderComment(f *model.Feedback, baseDomain, previewURL string) string {
 		fmt.Fprintf(&b, "\n<details><summary>Console (%s)</summary>\n\n```\n%s\n```\n\n</details>\n",
 			consoleCount(f.Console), consoleBody(f.Console))
 	}
+
+	if len(f.Network) > 0 {
+		fmt.Fprintf(&b, "\n<details><summary>Network (%s)</summary>\n\n```\n%s\n```\n\n</details>\n",
+			plural(len(f.Network), "failed request"), networkBody(f.Network))
+	}
 	return b.String()
+}
+
+// typeHeading turns a report type into the glyph and word that open the
+// comment. An unknown or missing type reads as a bug, like the widget default.
+func typeHeading(kind string) (string, string) {
+	switch kind {
+	case "design":
+		return "🎨", "Design"
+	case "question":
+		return "❓", "Question"
+	default:
+		return "🐞", "Bug"
+	}
+}
+
+func networkBody(entries []model.NetworkEntry) string {
+	lines := make([]string, 0, len(entries))
+	for _, e := range entries {
+		status := strconv.Itoa(e.Status)
+		if e.Status == 0 {
+			status = "no response"
+		}
+		line := strings.TrimSpace(e.Method + " " + e.Path + " " + status)
+		if e.RequestID != "" {
+			line += " x-request-id=" + e.RequestID
+		}
+		if e.At != "" {
+			line = e.At + " " + line
+		}
+		lines = append(lines, fence(line))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // locationTable is written for whoever has to find the element again, a person
@@ -47,6 +85,9 @@ func locationTable(f *model.Feedback, previewURL string) string {
 	}
 	if f.Title != "" {
 		rows = append(rows, [2]string{"Page title", sanitize(f.Title)})
+	}
+	for _, key := range sortedKeys(f.Context) {
+		rows = append(rows, [2]string{sanitize(key), code(f.Context[key])})
 	}
 	if f.Element != nil && f.Element.Heading != "" {
 		rows = append(rows, [2]string{"Section", sanitize(f.Element.Heading)})
@@ -84,6 +125,18 @@ func locationTable(f *model.Feedback, previewURL string) string {
 		fmt.Fprintf(&b, "| %s | %s |\n", r[0], r[1])
 	}
 	return b.String()
+}
+
+func sortedKeys(m map[string]string) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func elementRows(e *model.Element) [][2]string {

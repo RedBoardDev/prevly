@@ -62,7 +62,7 @@ function stableClasses(el: Element): string[] {
     .map((name) => clamp(name, LIMITS.attrValue));
 }
 
-export function xpathOf(el: Element): string | null {
+function xpathOf(el: Element): string | null {
   const parts: string[] = [];
   let node: Element | null = el;
   while (node && node.nodeType === 1) {
@@ -84,7 +84,7 @@ export function xpathOf(el: Element): string | null {
   return parts.length ? `/${parts.join('/')}` : null;
 }
 
-export function ancestorTrail(el: Element): string[] {
+function ancestorTrail(el: Element): string[] {
   const trail: string[] = [];
   let node: Element | null = el.parentElement;
   while (node && node.tagName !== 'HTML' && trail.length < LIMITS.ancestors) {
@@ -94,7 +94,7 @@ export function ancestorTrail(el: Element): string[] {
   return trail;
 }
 
-export function nearestHeading(el: Element): string | null {
+function nearestHeading(el: Element): string | null {
   let node: Element | null = el;
   while (node) {
     let sibling: Element | null = node.previousElementSibling;

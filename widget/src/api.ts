@@ -2,7 +2,7 @@ import type { FeedbackItem, FeedbackMeta } from './types';
 
 export const API_PATH = '/_prevly/api/feedback';
 
-export type SubmitResult =
+type SubmitResult =
   | { ok: true; item: FeedbackItem }
   | { ok: false; kind: 'rate-limit'; retryAfter: number | null; message: string }
   | { ok: false; kind: 'error'; message: string };

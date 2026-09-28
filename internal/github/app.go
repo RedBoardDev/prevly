@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	gh "github.com/google/go-github/v66/github"
@@ -26,15 +25,6 @@ func NewApp(appID int64, privateKeyPEM []byte) (*App, error) {
 		return nil, fmt.Errorf("github app transport: %w", err)
 	}
 	return &App{appID: appID, appsTr: atr, baseHTTP: base}, nil
-}
-
-// NewAppFromFile builds an App reading the private key from a PEM file.
-func NewAppFromFile(appID int64, pemPath string) (*App, error) {
-	pem, err := os.ReadFile(pemPath)
-	if err != nil {
-		return nil, fmt.Errorf("read github app key: %w", err)
-	}
-	return NewApp(appID, pem)
 }
 
 func (a *App) installationTransport(installationID int64) *ghinstallation.Transport {
