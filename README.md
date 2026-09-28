@@ -78,22 +78,43 @@ prevly version   version info
 
 ## Preview feedback
 
-Reviewers annotate a running preview and the annotation lands as a comment on
-the pull request. Nothing is installed in the previewed app: the daemon injects
-one `<script>` tag into the HTML it proxies, and the widget talks to the daemon
-on the same origin under `/_prevly/`. It is on by default on every preview;
-"Hide until reload" gets it out of the way for the current page.
+Reviewers report a problem from inside a running preview and it lands as a
+comment on the pull request. Nothing is installed in the previewed app: the
+daemon injects one `<script>` tag into the HTML it proxies, and the widget
+talks to the daemon on the same origin under `/_prevly/`.
+
+A small badge sits in a corner, drawn in the browser's top layer so no overlay
+can bury it. Write a sentence and send, or point at the element that is wrong
+and draw on the screenshot. A cross closes the badge; the shortcut brings it
+back. Existing reports come back as numbered pins on the elements they were
+left on.
 
 Each report becomes one PR comment: the reviewer's words in plain sight, and
-the screenshot, the console and a location table folded underneath. The table
-carries the selector, the XPath, the element's locating attributes, its
-ancestors and the nearest heading, so whoever picks the report up — a person or
-an agent — finds the element without guessing. No IP address is stored and the
-raw user agent never leaves the browser, only a "Chrome 152 on macOS" label.
+the screenshot, the console, the failed API calls and a location table folded
+underneath. The table carries the selector, the XPath, the locating
+attributes, the ancestors and the nearest heading, so whoever picks the report
+up, a person or an agent, finds the element without guessing. Captured failed
+requests carry `x-request-id`, which ties the report to the exact server log
+line. No IP address is stored and the raw user agent never leaves the browser,
+only a "Chrome 152 on macOS" label.
 
 Screenshots are served from the base domain so they outlive the preview. Turn
 it off host-wide with `feedback.enabled: false`, or per repo with
 `feedback: false` in `.prevly.yml`. See [`docs/feedback.md`](./docs/feedback.md).
+
+### The widget on your own environments
+
+The in-page half is published on its own as
+[`prevly-feedback-widget`](./widget), MIT, framework-free. Mount it in a
+staging or demo deployment and point it at any endpoint that answers two
+calls, and you get the same reporting where prevly is not the one serving the
+traffic. The contract is [`docs/widget-package.md`](./docs/widget-package.md).
+
+```ts
+import { mountFeedback } from 'prevly-feedback-widget';
+
+mountFeedback({ endpoint: '/api/feedback', reporter: { name: 'Thomas' } });
+```
 
 ## Core principles
 

@@ -41,7 +41,23 @@ const (
 	maxConsoleMessage = 500
 	maxConsoleLevel   = 20
 	maxConsoleAt      = 40
+
+	maxContextKeys  = 10
+	maxContextKey   = 200
+	maxContextValue = 200
+
+	maxNetwork          = 5
+	maxNetworkPath      = 200
+	maxNetworkMethod    = 10
+	maxNetworkRequestID = 100
 )
+
+// defaultType is what a report without an explicit type is filed as. The widget
+// always sends one; an older bundle cached in a reviewer's browser does not.
+const defaultType = "bug"
+
+// reportTypes is the closed set a report can be filed under.
+var reportTypes = map[string]bool{"bug": true, "design": true, "question": true}
 
 // postTimeout bounds the synchronous PR comment; a slower GitHub leaves the
 // report stored and unposted for the reconcile loop.
@@ -264,6 +280,7 @@ func readPart(part *multipart.Part, limit int) ([]byte, error) {
 
 // meta is the JSON part of a report, as posted by the widget.
 type meta struct {
+	Type     string               `json:"type"`
 	Author   string               `json:"author"`
 	Comment  string               `json:"comment"`
 	Page     string               `json:"page"`
@@ -275,9 +292,18 @@ type meta struct {
 	Viewport *model.Viewport      `json:"viewport"`
 	Client   string               `json:"client"`
 	Console  []model.ConsoleEntry `json:"console"`
+	Context  map[string]string    `json:"context"`
+	Network  []model.NetworkEntry `json:"network"`
 }
 
 func (m *meta) validate() error {
+	m.Type = strings.TrimSpace(m.Type)
+	if m.Type == "" {
+		m.Type = defaultType
+	}
+	if !reportTypes[m.Type] {
+		return errors.New("type: must be bug, design or question")
+	}
 	m.Author = strings.TrimSpace(m.Author)
 	m.Comment = strings.TrimSpace(m.Comment)
 	m.Page = strings.TrimSpace(m.Page)
@@ -307,6 +333,12 @@ func (m *meta) validate() error {
 			return err
 		}
 	}
+	if err := validateContext(m.Context); err != nil {
+		return err
+	}
+	if err := validateNetwork(m.Network); err != nil {
+		return err
+	}
 	if len(m.Console) > maxConsole {
 		return fmt.Errorf("console: at most %d entries", maxConsole)
 	}
@@ -324,12 +356,49 @@ func (m *meta) validate() error {
 	return nil
 }
 
+func validateContext(context map[string]string) error {
+	if len(context) > maxContextKeys {
+		return fmt.Errorf("context: at most %d keys", maxContextKeys)
+	}
+	for key, value := range context {
+		if err := atMost("context key", key, maxContextKey); err != nil {
+			return err
+		}
+		if err := atMost("context."+key, value, maxContextValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateNetwork(entries []model.NetworkEntry) error {
+	if len(entries) > maxNetwork {
+		return fmt.Errorf("network: at most %d entries", maxNetwork)
+	}
+	for i := range entries {
+		if err := atMost("network.method", entries[i].Method, maxNetworkMethod); err != nil {
+			return err
+		}
+		if err := atMost("network.path", entries[i].Path, maxNetworkPath); err != nil {
+			return err
+		}
+		if err := atMost("network.requestId", entries[i].RequestID, maxNetworkRequestID); err != nil {
+			return err
+		}
+		if err := atMost("network.at", entries[i].At, maxConsoleAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *meta) record(id string, p *model.Preview, now time.Time, hasScreenshot bool) *model.Feedback {
 	return &model.Feedback{
 		ID:             id,
 		Repo:           p.Repo,
 		PRNumber:       p.PRNumber,
 		AppName:        p.AppName,
+		Type:           m.Type,
 		Page:           m.Page,
 		Author:         m.Author,
 		Comment:        m.Comment,
@@ -345,6 +414,8 @@ func (m *meta) record(id string, p *model.Preview, now time.Time, hasScreenshot 
 		CommitSHA:      p.CommitSHA,
 		Client:         m.Client,
 		Console:        m.Console,
+		Context:        m.Context,
+		Network:        m.Network,
 		HasScreenshot:  hasScreenshot,
 	}
 }
@@ -403,6 +474,7 @@ func atMost(field, value string, maxLen int) error {
 // rendered in the PR comment but never returned.
 type reportJSON struct {
 	ID            string          `json:"id"`
+	Type          string          `json:"type,omitempty"`
 	Repo          string          `json:"repo"`
 	PR            int             `json:"pr"`
 	App           string          `json:"app"`
@@ -423,6 +495,7 @@ type reportJSON struct {
 func (s *Service) toJSON(f *model.Feedback) reportJSON {
 	out := reportJSON{
 		ID:        f.ID,
+		Type:      f.Type,
 		Repo:      f.Repo,
 		PR:        f.PRNumber,
 		App:       f.AppName,

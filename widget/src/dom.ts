@@ -31,19 +31,3 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   }
   return node;
 }
-
-export function button(label: string, ariaLabel: string, onClick: () => void, cls = ''): HTMLButtonElement {
-  return el(
-    'button',
-    {
-      class: cls,
-      text: label,
-      attrs: { type: 'button', 'aria-label': ariaLabel },
-      on: { click: () => onClick() },
-    },
-  );
-}
-
-export function clear(node: Element): void {
-  while (node.firstChild) node.removeChild(node.firstChild);
-}

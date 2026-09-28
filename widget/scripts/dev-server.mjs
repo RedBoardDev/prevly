@@ -84,6 +84,7 @@ async function handlePost(req, res) {
   const id = randomUUID();
   const record = {
     id,
+    type: meta.type ?? 'bug',
     repo: 'akord-securite/KARE',
     pr: 1268,
     app: 'kare',
@@ -196,6 +197,11 @@ const server = createServer(async (req, res) => {
         })),
       );
     }
+
+    // A 500 the widget's network capture is expected to keep, and a 404 it is
+    // expected to ignore.
+    if (path === '/_dev/boom') return json(res, 500, { error: 'boom' }, { 'x-request-id': 'req-dev-1' });
+    if (path === '/_dev/missing') return json(res, 404, { error: 'nope' });
 
     if (path === '/_dev/reset') {
       store.length = 0;

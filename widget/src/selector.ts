@@ -30,7 +30,7 @@ function tryFinder(el: Element, root: Element): string | null {
   }
 }
 
-export function tagPath(el: Element): string | null {
+function tagPath(el: Element): string | null {
   const parts: string[] = [];
   let node: Element | null = el;
   while (node) {

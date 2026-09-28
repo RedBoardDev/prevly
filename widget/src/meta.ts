@@ -1,8 +1,19 @@
 import { clientLabel } from './client-label';
 import { LIMITS, clamp, collapse } from './limits';
-import type { ConsoleEntry, FeedbackMeta, Point, Rect, TargetInfo, Viewport } from './types';
+import { DEFAULT_LABELS } from './options';
+import type { Labels, ReportType } from './options';
+import type {
+  ConsoleEntry,
+  FeedbackMeta,
+  NetworkEntry,
+  Point,
+  Rect,
+  TargetInfo,
+  Viewport,
+} from './types';
 
 export interface MetaInput {
+  type: ReportType;
   author: string;
   comment: string;
   page: string;
@@ -14,10 +25,13 @@ export interface MetaInput {
   viewport: Viewport;
   userAgent?: string | null;
   console?: ConsoleEntry[] | null;
+  context?: Record<string, string> | null;
+  network?: NetworkEntry[] | null;
 }
 
 export function buildMeta(input: MetaInput): FeedbackMeta {
   const meta: FeedbackMeta = {
+    type: input.type,
     author: clamp(collapse(input.author), LIMITS.author),
     comment: clamp(input.comment.trim(), LIMITS.comment),
     page: clamp(input.page, LIMITS.page),
@@ -52,6 +66,12 @@ export function buildMeta(input: MetaInput): FeedbackMeta {
 
   if (input.click) meta.click = { x: Math.round(input.click.x), y: Math.round(input.click.y) };
 
+  const context = clampContext(input.context ?? {});
+  if (Object.keys(context).length) meta.context = context;
+
+  const network = clampNetwork(input.network ?? []);
+  if (network.length) meta.network = network;
+
   if (input.rect) {
     meta.rect = {
       x: Math.round(input.rect.x),
@@ -64,11 +84,37 @@ export function buildMeta(input: MetaInput): FeedbackMeta {
   return meta;
 }
 
-export function metaError(meta: Pick<FeedbackMeta, 'author' | 'comment' | 'page'>): string | null {
-  if (!meta.author) return 'A name is required.';
-  if (!meta.comment) return 'A comment is required.';
-  if (!meta.page) return 'The page is unknown.';
+export function metaError(
+  meta: Pick<FeedbackMeta, 'author' | 'comment' | 'page'>,
+  labels: Pick<Labels, 'nameRequired' | 'commentRequired' | 'pageUnknown'> = DEFAULT_LABELS,
+): string | null {
+  if (!meta.author) return labels.nameRequired;
+  if (!meta.comment) return labels.commentRequired;
+  if (!meta.page) return labels.pageUnknown;
   return null;
+}
+
+function clampContext(context: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(context)) {
+    if (Object.keys(out).length >= LIMITS.contextKeys) break;
+    if (!key) continue;
+    out[clamp(key, LIMITS.contextKey)] = clamp(String(value), LIMITS.contextValue);
+  }
+  return out;
+}
+
+function clampNetwork(entries: NetworkEntry[]): NetworkEntry[] {
+  return entries.slice(-LIMITS.networkEntries).map((entry) => {
+    const out: NetworkEntry = {
+      method: entry.method,
+      path: clamp(entry.path, LIMITS.networkPath),
+      status: entry.status,
+      at: entry.at,
+    };
+    if (entry.requestId) out.requestId = clamp(entry.requestId, LIMITS.requestId);
+    return out;
+  });
 }
 
 function clampConsole(entries: ConsoleEntry[]): ConsoleEntry[] {

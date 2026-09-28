@@ -14,6 +14,7 @@ func sampleRecord() *model.Feedback {
 		Repo:     "akord-securite/KARE",
 		PRNumber: 1268,
 		AppName:  "kare",
+		Type:     "bug",
 		Page:     "/reports/123?tab=costs",
 		Author:   "Thomas",
 		Comment:  "The total is wrong",
@@ -31,6 +32,11 @@ func sampleRecord() *model.Feedback {
 		CreatedAt: time.Date(2026, 9, 21, 10, 12, 40, 0, time.UTC),
 		CommitSHA: "abc1234def5678",
 		Client:    "Chrome 130 on macOS",
+		Context:   map[string]string{"stage": "staging", "release": "2026.09.4"},
+		Network: []model.NetworkEntry{
+			{Method: "GET", Path: "/rs/v1/reports/123", Status: 500, RequestID: "req-9f2c", At: "2026-09-21T10:12:33Z"},
+			{Method: "POST", Path: "/rs/v1/reports", Status: 0, At: "2026-09-21T10:12:35Z"},
+		},
 		Console: []model.ConsoleEntry{
 			{Level: "error", Message: "TypeError: boom", At: "2026-09-21T10:12:33Z"},
 			{Level: "error", Message: "TypeError: bam", At: "2026-09-21T10:12:34Z"},
@@ -45,12 +51,14 @@ func TestRenderComment(t *testing.T) {
 
 	want := []string{
 		"<!-- prevly-feedback:01J8ABCDEFGHJKMNPQRSTVWXYZ -->",
-		"### 💬 Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-kare.preview.example.com/reports/123?tab=costs>)",
+		"### 🐞 Bug · Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-kare.preview.example.com/reports/123?tab=costs>)",
 		"> The total is wrong",
 		"<details><summary>Screenshot</summary>",
 		"![screenshot](https://preview.example.com/_prevly/feedback/01J8ABCDEFGHJKMNPQRSTVWXYZ/screenshot.png)",
 		"<details><summary>Where exactly</summary>",
 		"| URL | <https://pr-1268-kare.preview.example.com/reports/123?tab=costs> |",
+		"| release | `2026.09.4` |",
+		"| stage | `staging` |",
 		"| Section | Détail des prestations |",
 		"| CSS selector | `main > table tr:nth-child(3) td.total` |",
 		"| Element | `<td>` |",
@@ -66,6 +74,9 @@ func TestRenderComment(t *testing.T) {
 		"| Reported | 2026-09-21 10:12 UTC |",
 		"<details><summary>Console (2 errors)</summary>",
 		"2026-09-21T10:12:33Z error TypeError: boom",
+		"<details><summary>Network (2 failed requests)</summary>",
+		"2026-09-21T10:12:33Z GET /rs/v1/reports/123 500 x-request-id=req-9f2c",
+		"2026-09-21T10:12:35Z POST /rs/v1/reports no response",
 	}
 	for _, w := range want {
 		if !strings.Contains(body, w) {
@@ -88,7 +99,8 @@ func TestRenderCommentFoldsEverythingButTheWords(t *testing.T) {
 		t.Fatal("nothing is folded")
 	}
 	if strings.Contains(visible, "screenshot") || strings.Contains(visible, "XPath") ||
-		strings.Contains(visible, "Viewport") || strings.Contains(visible, "TypeError") {
+		strings.Contains(visible, "Viewport") || strings.Contains(visible, "TypeError") ||
+		strings.Contains(visible, "staging") || strings.Contains(visible, "req-9f2c") {
 		t.Fatalf("context leaked above the fold:\n%s", visible)
 	}
 	if !strings.Contains(visible, "> The total is wrong") {
@@ -118,7 +130,10 @@ func TestRenderCommentMinimal(t *testing.T) {
 	if strings.Contains(body, "Console (") {
 		t.Fatal("no console block without entries")
 	}
-	if !strings.Contains(body, "### 💬 T · `web`") {
+	if strings.Contains(body, "Network (") {
+		t.Fatal("no network block without entries")
+	}
+	if !strings.Contains(body, "### 🐞 Bug · T · `web`") {
 		t.Fatalf("heading missing:\n%s", body)
 	}
 }
@@ -129,6 +144,7 @@ func TestRenderCommentEscapesMarkers(t *testing.T) {
 	f.Comment = "look: <!-- prevly --> and closing -->"
 	f.Author = "<!-- prevly -->"
 	f.Console = []model.ConsoleEntry{{Level: "log", Message: "```\nfence"}}
+	f.Network = nil
 
 	body := RenderComment(f, "base.example.com", "https://pr-1.base.example.com")
 	if strings.Contains(body, "<!-- prevly -->") {
@@ -139,6 +155,23 @@ func TestRenderCommentEscapesMarkers(t *testing.T) {
 	}
 	if !strings.Contains(body, "Console (1 entry)") {
 		t.Fatalf("non-error console entries must not be counted as errors:\n%s", body)
+	}
+}
+
+func TestRenderCommentHeadingCarriesTheType(t *testing.T) {
+	t.Parallel()
+	for kind, want := range map[string]string{
+		"bug":      "### 🐞 Bug · Thomas",
+		"design":   "### 🎨 Design · Thomas",
+		"question": "### ❓ Question · Thomas",
+		"":         "### 🐞 Bug · Thomas",
+	} {
+		f := sampleRecord()
+		f.Type = kind
+		body := RenderComment(f, "base.example.com", "https://pr-1.base.example.com")
+		if !strings.Contains(body, want) {
+			t.Fatalf("type %q: heading missing %q:\n%s", kind, want, body)
+		}
 	}
 }
 

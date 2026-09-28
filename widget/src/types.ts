@@ -1,3 +1,5 @@
+import type { ReportType } from './options';
+
 export type ConsoleLevel = 'error' | 'warn';
 
 export interface ConsoleEntry {
@@ -6,7 +8,7 @@ export interface ConsoleEntry {
   at: string;
 }
 
-export interface ElementInfo {
+interface ElementInfo {
   tag: string;
   text: string;
 }
@@ -39,7 +41,16 @@ export interface TargetInfo {
   heading?: string | null;
 }
 
+export interface NetworkEntry {
+  method: string;
+  path: string;
+  status: number;
+  requestId?: string;
+  at: string;
+}
+
 export interface FeedbackMeta {
+  type: ReportType;
   author: string;
   comment: string;
   page: string;
@@ -51,10 +62,13 @@ export interface FeedbackMeta {
   viewport: Viewport;
   client: string;
   console: ConsoleEntry[];
+  context?: Record<string, string>;
+  network?: NetworkEntry[];
 }
 
 export interface FeedbackItem {
   id: string;
+  type?: ReportType;
   repo?: string;
   pr?: number;
   app?: string;

@@ -7,9 +7,9 @@ export interface Shot {
   scale: number;
 }
 
-export const MAX_SCALE = 2;
+const MAX_SCALE = 2;
 
-export function captureScale(dpr: number): number {
+function captureScale(dpr: number): number {
   const value = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
   return Math.min(value, MAX_SCALE);
 }

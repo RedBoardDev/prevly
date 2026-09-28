@@ -4,6 +4,7 @@ import { buildMeta } from './meta';
 import type { FeedbackItem } from './types';
 
 const meta = buildMeta({
+  type: 'bug',
   author: 'Thomas',
   comment: 'The total is wrong',
   page: '/reports?tab=costs',

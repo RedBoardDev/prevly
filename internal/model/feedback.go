@@ -38,6 +38,16 @@ type Viewport struct {
 	DPR float64 `json:"dpr"`
 }
 
+// NetworkEntry is one failed request captured with a feedback report. Status 0
+// means the request never completed.
+type NetworkEntry struct {
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	Status    int    `json:"status"`
+	RequestID string `json:"requestId,omitempty"`
+	At        string `json:"at,omitempty"`
+}
+
 // ConsoleEntry is one browser console line captured with a feedback report.
 type ConsoleEntry struct {
 	Level   string `json:"level"`
@@ -53,6 +63,7 @@ type Feedback struct {
 	PRNumber int    `json:"pr"`
 	AppName  string `json:"app"`
 
+	Type     string    `json:"type,omitempty"`
 	Page     string    `json:"page"`
 	Author   string    `json:"author"`
 	Comment  string    `json:"comment"`
@@ -70,8 +81,10 @@ type Feedback struct {
 	CommitSHA      string `json:"commit_sha,omitempty"`
 	Client         string `json:"client,omitempty"`
 
-	Console       []ConsoleEntry `json:"console,omitempty"`
-	HasScreenshot bool           `json:"screenshot"`
+	Console       []ConsoleEntry    `json:"console,omitempty"`
+	Network       []NetworkEntry    `json:"network,omitempty"`
+	Context       map[string]string `json:"context,omitempty"`
+	HasScreenshot bool              `json:"screenshot"`
 
 	CommentID    int64  `json:"comment_id"`
 	CommentURL   string `json:"comment_url,omitempty"`

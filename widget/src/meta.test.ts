@@ -4,6 +4,7 @@ import { buildMeta, metaError } from './meta';
 import type { ConsoleEntry } from './types';
 
 const base = {
+  type: 'bug' as const,
   author: 'Thomas',
   comment: 'The total is wrong',
   page: '/reports/123?tab=costs',
@@ -24,6 +25,7 @@ describe('buildMeta', () => {
     });
 
     expect(meta).toEqual({
+      type: 'bug',
       author: 'Thomas',
       comment: 'The total is wrong',
       page: '/reports/123?tab=costs',
@@ -86,5 +88,65 @@ describe('metaError', () => {
   it('rejects an empty author or comment', () => {
     expect(metaError(buildMeta({ ...base, author: '   ' }))).toMatch(/name/i);
     expect(metaError(buildMeta({ ...base, comment: '\n\t' }))).toMatch(/comment/i);
+  });
+});
+
+describe('a page-level report', () => {
+  it('carries the page and no element at all', () => {
+    const meta = buildMeta({
+      ...base,
+      type: 'question',
+      title: 'Report – KARE',
+      selector: null,
+      element: null,
+      click: null,
+      rect: null,
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/152.0.0.0 Safari/537.36',
+      console: [],
+    });
+
+    expect(meta).toEqual({
+      type: 'question',
+      author: 'Thomas',
+      comment: 'The total is wrong',
+      page: '/reports/123?tab=costs',
+      title: 'Report – KARE',
+      viewport: { w: 1440, h: 901, dpr: 2 },
+      client: 'Chrome 152 on macOS',
+      console: [],
+    });
+    expect('selector' in meta).toBe(false);
+    expect('element' in meta).toBe(false);
+    expect('click' in meta).toBe(false);
+    expect('rect' in meta).toBe(false);
+  });
+
+  it('echoes the context and the network entries, bounded', () => {
+    const context: Record<string, string> = {};
+    for (let i = 0; i < 14; i += 1) context[`k${i}`] = 'v';
+    const network = Array.from({ length: 8 }, (_, i) => ({
+      method: 'GET',
+      path: `/api/${i}`,
+      status: 500,
+      at: '2026-09-28T09:12:33.000Z',
+    }));
+
+    const meta = buildMeta({ ...base, context, network });
+
+    expect(Object.keys(meta.context ?? {})).toHaveLength(LIMITS.contextKeys);
+    expect(meta.network?.map((entry) => entry.path)).toEqual([
+      '/api/3',
+      '/api/4',
+      '/api/5',
+      '/api/6',
+      '/api/7',
+    ]);
+  });
+
+  it('leaves context and network out when the host gave none', () => {
+    const meta = buildMeta({ ...base });
+
+    expect('context' in meta).toBe(false);
+    expect('network' in meta).toBe(false);
   });
 });

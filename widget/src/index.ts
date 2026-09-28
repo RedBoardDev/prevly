@@ -1,74 +1,13 @@
-import { parseActivationUrl } from './activation';
-import { createApp } from './app';
-import { startConsoleRecorder } from './console-recorder';
-
-declare global {
-  interface Window {
-    __prevlyFeedback?: { open(): void; hide(): void };
-  }
-}
-
-function boot(): void {
-  const recorder = startConsoleRecorder();
-  const storage = safeStorage();
-
-  const activation = parseActivationUrl(location.href);
-  if (activation.requested) {
-    if (activation.cleanedUrl) {
-      try {
-        history.replaceState(history.state, '', activation.cleanedUrl);
-      } catch {
-        /* replaceState can be blocked in sandboxed frames */
-      }
-    }
-  }
-
-  const app = createApp({ recorder, storage });
-
-  window.__prevlyFeedback = {
-    open() {
-      try {
-        app.open();
-      } catch (error) {
-        console.debug('[prevly] feedback open failed', error);
-      }
-    },
-    hide() {
-      try {
-        app.unmount();
-      } catch (error) {
-        console.debug('[prevly] feedback hide failed', error);
-      }
-    },
-  };
-
-  whenReady(() => {
-    try {
-      app.mount();
-    } catch (error) {
-      console.debug('[prevly] feedback mount failed', error);
-    }
-  });
-}
-
-function whenReady(action: () => void): void {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', action, { once: true });
-    return;
-  }
-  action();
-}
-
-function safeStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-try {
-  boot();
-} catch (error) {
-  console.debug('[prevly] feedback widget failed to start', error);
-}
+export { mountFeedback, startRecorders } from './mount';
+export type { FeedbackWidget } from './mount';
+export { DEFAULT_LABELS, REPORT_TYPES, CORNERS } from './options';
+export type {
+  Corner,
+  Labels,
+  MountOptions,
+  NetworkOptions,
+  Reporter,
+  ReportType,
+  Theme,
+} from './options';
+export type { FeedbackItem, FeedbackMeta, NetworkEntry } from './types';

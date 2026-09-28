@@ -18,9 +18,9 @@ GitHub  ── GET  https://<base>/_prevly/feedback/<id>/screenshot.png (camo fe
 
 The widget is on wherever the daemon injects it. There is no activation step:
 `feedback.enabled` on the host and `feedback` in `.prevly.yml` are the only
-switches. The menu has "Hide until reload", which unmounts it for the current
-page only, the way a framework's dev indicator behaves; the next page load
-brings it back.
+switches. The badge carries a cross that closes it; the choice is remembered
+per host in `localStorage` and `Ctrl`/`Cmd` + `F` brings it back, straight into
+a report.
 
 ## Routing on a preview host
 
@@ -43,37 +43,30 @@ Unknown host (no preview in the store) → `404` as today.
 
 ## POST /_prevly/api/feedback
 
-`multipart/form-data` with two parts:
+`multipart/form-data`, a `meta` JSON part and an optional `screenshot` PNG part.
+The shape of `meta` is the widget's contract and lives in one place only,
+[`widget-package.md`](./widget-package.md#what-it-sends). Restating it here
+would give two copies, and the one that drifts is the one that misleads.
 
-- `meta`: JSON, `application/json`, ≤ 64 KiB
-- `screenshot`: PNG, ≤ 3 MiB, optional (a report without image is valid)
+What this server adds on top of that shape are the bounds it enforces and the
+answers it gives. A payload outside a bound is rejected whole, never truncated.
 
-```jsonc
-// meta
-{
-  "author": "Thomas",                 // 1..80 chars, required
-  "comment": "The total is wrong",    // 1..4000 chars, required
-  "page": "/reports/123?tab=costs",   // path + query of the page, required, must start with "/", <= 2048
-  "title": "Report – KARE",           // document.title, ≤ 200
-  "selector": "main > table tr:nth-child(3) td.total",  // ≤ 500, optional
-  "element": {                        // optional, everything needed to find it again
-    "tag": "td",
-    "text": "1 234,00 €",             // ≤ 120
-    "xpath": "/html/body/main/table/tbody/tr[3]/td[4]",
-    "attrs": { "id": "grand-total" }, // allowlisted locating attributes only, never `value`
-    "classes": ["total"],             // ≤ 8, each ≤ 80
-    "ancestors": ["main#report", "table.prestations"], // ≤ 8
-    "heading": "Détail des prestations"
-  },
-  "click": { "x": 812, "y": 403 },    // viewport coords of the click, optional
-  "rect":  { "x": 780, "y": 390, "w": 96, "h": 28 },     // element rect in viewport, optional
-  "viewport": { "w": 1440, "h": 900, "dpr": 2 },
-  "client": "Chrome 152 on macOS",    // coarse label, never the raw user agent, ≤ 80
-  "console": [                        // ≤ 20 entries, each message ≤ 500 chars
-    { "level": "error", "message": "TypeError: …", "at": "2026-09-21T10:12:33Z" }
-  ]
-}
-```
+| | |
+|---|---|
+| `meta` part | ≤ 64 KiB |
+| `screenshot` part | ≤ 3 MiB, PNG, optional |
+| `comment` | 1..4000, the only required field |
+| `author` | 1..80, required |
+| `type` | `bug`, `design` or `question`; `bug` when absent |
+| `page` | starts with `/`, ≤ 2048 |
+| `title`, `element.text`, `element.heading` | ≤ 200, ≤ 120, ≤ 120 |
+| `selector`, `element.xpath` | ≤ 500 |
+| `element.attrs` | ≤ 16 entries, values ≤ 80 |
+| `element.classes`, `element.ancestors` | ≤ 8 entries, each ≤ 80 |
+| `client` | ≤ 80 |
+| `console` | ≤ 20 entries, message ≤ 500 |
+| `context` | ≤ 10 keys, keys and values ≤ 200 |
+| `network` | ≤ 5 entries, path ≤ 200 |
 
 Responses: `201` with the stored item; `400` on invalid meta or oversize parts;
 `404` unknown host; `415` wrong content type; `429` over the per-host rate
@@ -89,6 +82,7 @@ and the reconcile loop retries it on its next tick.
   "repo": "akord-securite/KARE",
   "pr": 1268,
   "app": "kare",
+  "type": "bug",
   "page": "/reports/123?tab=costs",
   "author": "Thomas",
   "comment": "The total is wrong",
@@ -100,8 +94,8 @@ and the reconcile loop retries it on its next tick.
 }
 ```
 
-`client` and `console` are stored and rendered in the PR comment but not
-returned by the list endpoint. No IP address is ever read or stored, and the
+`client`, `console`, `context` and `network` are stored and rendered in the PR
+comment; only `type` of the four is returned by the list endpoint. No IP address is ever read or stored, and the
 raw user agent never leaves the browser: the widget derives a browser and
 platform label from it and sends only that.
 
@@ -115,7 +109,7 @@ One plain comment per feedback (never the sticky one), authored by the App.
 
 ```markdown
 <!-- prevly-feedback:01J8… -->
-### 💬 Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-rs.<base>/reports/123?tab=costs>)
+### 🐞 Bug · Thomas · `kare` · [/reports/123?tab=costs](<https://pr-1268-rs.<base>/reports/123?tab=costs>)
 
 > The total is wrong
 
@@ -131,6 +125,7 @@ One plain comment per feedback (never the sticky one), authored by the App.
 |---|---|
 | URL | <https://pr-1268-rs.<base>/reports/123?tab=costs> |
 | App | `kare` |
+| stage | `staging` |
 | Section | Détail des prestations |
 | CSS selector | `main > table tr:nth-child(3) td.total` |
 | Element | `<td>` |
@@ -152,15 +147,19 @@ One plain comment per feedback (never the sticky one), authored by the App.
 ```
 
 </details>
+
+<details><summary>Network (1 failed request)</summary>
+
+```
+2026-09-21T10:12:33Z GET /rs/v1/reports/123 500 x-request-id=req-9f2c
+```
+
+</details>
 ```
 
 Only the heading and the reviewer's own words are visible. The screenshot, the
-location table and the console are folded, so a pull request collecting a dozen
-reports stays readable.
-2026-09-21T10:12:33Z error TypeError: …
-```
-</details>
-```
+location table, the console and the network are folded, so a pull request
+collecting a dozen reports stays readable.
 
 Nothing is added to the sticky comment: the widget is already there.
 
@@ -169,7 +168,7 @@ Nothing is added to the sticky comment: the widget is already there.
 bbolt bucket `feedback`, key `<repo>#<pr>#<app>#<id>` (id is Crockford base32
 of a 6-byte millisecond timestamp + 10 random bytes, so keys sort by age), JSON
 value (the full
-record incl. client/console, plus `comment_id`, `installation_id`, `host`,
+record incl. client/console/context/network, plus `comment_id`, `installation_id`, `host`,
 `commit_sha`, `screenshot` bool). Screenshots on disk:
 `<data_dir>/feedback/<id>.png`.
 
