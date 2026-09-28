@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/RedBoardDev/prevly/internal/config"
+	gh "github.com/RedBoardDev/prevly/internal/github"
 	applog "github.com/RedBoardDev/prevly/internal/log"
 	"github.com/RedBoardDev/prevly/internal/model"
 	"github.com/RedBoardDev/prevly/internal/store"
@@ -35,6 +36,13 @@ type fakeGitHub struct {
 	mu     sync.Mutex
 	bodies []string
 	err    error
+
+	installations   map[string]int64
+	installationErr error
+
+	issues    []gh.SiteReport
+	issueErr  error
+	issueOnce gh.CreateIssueResult
 }
 
 func (f *fakeGitHub) PostComment(_ context.Context, _ int64, owner, repo string, pr int, body string) (int64, string, error) {
@@ -45,6 +53,46 @@ func (f *fakeGitHub) PostComment(_ context.Context, _ int64, owner, repo string,
 	}
 	f.bodies = append(f.bodies, body)
 	return int64(len(f.bodies)), "https://github.com/" + owner + "/" + repo + "/pull/42#issuecomment-1", nil
+}
+
+func (f *fakeGitHub) FindInstallation(_ context.Context, owner, repo string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.installationErr != nil {
+		return 0, f.installationErr
+	}
+	if id, ok := f.installations[owner+"/"+repo]; ok {
+		return id, nil
+	}
+	return 99, nil
+}
+
+func (f *fakeGitHub) CreateSiteIssue(_ context.Context, _ int64, _, _, _ string, _ time.Time, r gh.SiteReport) (gh.CreateIssueResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.issueErr != nil {
+		return gh.CreateIssueResult{}, f.issueErr
+	}
+	f.issues = append(f.issues, r)
+	if f.issueOnce.Number != 0 || f.issueOnce.URL != "" {
+		return f.issueOnce, nil
+	}
+	return gh.CreateIssueResult{Number: len(f.issues), URL: "https://github.com/acme/shop/issues/" + strconv.Itoa(len(f.issues))}, nil
+}
+
+func (f *fakeGitHub) lastIssue() gh.SiteReport {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.issues) == 0 {
+		return gh.SiteReport{}
+	}
+	return f.issues[len(f.issues)-1]
+}
+
+func (f *fakeGitHub) issueCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.issues)
 }
 
 func (f *fakeGitHub) last() string {

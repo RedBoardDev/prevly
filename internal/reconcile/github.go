@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/RedBoardDev/prevly/internal/config"
 	gh "github.com/RedBoardDev/prevly/internal/github"
@@ -26,6 +27,8 @@ type GitHub interface {
 	CreateDeployment(ctx context.Context, installationID int64, owner, repo, ref, environment string) (int64, error)
 	SetDeploymentStatus(ctx context.Context, installationID int64, owner, repo string, deploymentID int64, status model.Status, url string) error
 	DeleteEnvironment(ctx context.Context, installationID int64, owner, repo, environment string) error
+	FindInstallation(ctx context.Context, owner, repo string) (int64, error)
+	CreateSiteIssue(ctx context.Context, installationID int64, owner, repo, marker string, since time.Time, r gh.SiteReport) (gh.CreateIssueResult, error)
 }
 
 // appGitHub adapts a *github.App to the GitHub interface using installation-
@@ -82,4 +85,12 @@ func (a *appGitHub) SetDeploymentStatus(ctx context.Context, installationID int6
 
 func (a *appGitHub) DeleteEnvironment(ctx context.Context, installationID int64, owner, repo, environment string) error {
 	return gh.NewFeedback(a.app.Client(installationID)).DeleteEnvironment(ctx, owner, repo, environment)
+}
+
+func (a *appGitHub) FindInstallation(ctx context.Context, owner, repo string) (int64, error) {
+	return a.app.FindRepositoryInstallation(ctx, owner, repo)
+}
+
+func (a *appGitHub) CreateSiteIssue(ctx context.Context, installationID int64, owner, repo, marker string, since time.Time, r gh.SiteReport) (gh.CreateIssueResult, error) {
+	return gh.CreateSiteIssue(ctx, a.app.Client(installationID), owner, repo, marker, since, r)
 }

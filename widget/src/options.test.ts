@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_LABELS, resolveOptions } from './options';
+import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_LABELS, LOCALES, resolveOptions } from './options';
 
 describe('resolveOptions', () => {
+  afterEach(() => {
+    document.documentElement.lang = '';
+  });
+
+
   it('fills every default', () => {
     const resolved = resolveOptions({ endpoint: '/api/feedback' });
 
@@ -15,6 +20,29 @@ describe('resolveOptions', () => {
     });
     expect(resolved.labels).toEqual(DEFAULT_LABELS);
     expect(resolved.origins).toEqual([location.origin]);
+  });
+
+  it('picks the French label set when the page is tagged fr', () => {
+    document.documentElement.lang = 'fr';
+    const { labels } = resolveOptions({ endpoint: '/x' });
+    expect(labels).toEqual(LOCALES.fr!);
+  });
+
+  it('picks French for a regional variant like fr-CA', () => {
+    document.documentElement.lang = 'fr-CA';
+    expect(resolveOptions({ endpoint: '/x' }).labels).toEqual(LOCALES.fr!);
+  });
+
+  it('falls back to English for any other language', () => {
+    document.documentElement.lang = 'de';
+    expect(resolveOptions({ endpoint: '/x' }).labels).toEqual(DEFAULT_LABELS);
+  });
+
+  it('lets an explicit label override the locale pick', () => {
+    document.documentElement.lang = 'fr';
+    const { labels } = resolveOptions({ endpoint: '/x', labels: { send: 'Go' } });
+    expect(labels.send).toBe('Go');
+    expect(labels.cancel).toBe(LOCALES.fr!.cancel);
   });
 
   it('overrides only the labels the host supplies', () => {

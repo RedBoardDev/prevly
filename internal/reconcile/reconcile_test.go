@@ -147,6 +147,12 @@ func (f *fakeGitHub) DeleteEnvironment(_ context.Context, _ int64, _, _ string, 
 	return nil
 }
 
+func (f *fakeGitHub) FindInstallation(context.Context, string, string) (int64, error) { return 1, nil }
+
+func (f *fakeGitHub) CreateSiteIssue(context.Context, int64, string, string, string, time.Time, gh.SiteReport) (gh.CreateIssueResult, error) {
+	return gh.CreateIssueResult{Number: 1, URL: "https://github.com/org/repo/issues/1"}, nil
+}
+
 // --- helpers ---
 
 func newTestReconciler(t *testing.T, gh GitHub, rt runtime.Runtime, bld builder.Builder) (*Reconciler, *store.Store) {

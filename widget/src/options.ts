@@ -111,6 +111,60 @@ export const DEFAULT_LABELS: Labels = {
   locked: 'Open this preview from the link in the pull request to send feedback.',
 };
 
+const FRENCH_LABELS: Labels = {
+  badge: 'Signaler un problème',
+  close: 'Masquer',
+  reports: 'signalements sur cette page',
+  panel: 'Nouveau signalement',
+  comment: "Que s'est-il passé ?",
+  commentPlaceholder: 'Décrivez-le en une phrase',
+  type: 'Type',
+  typeBug: 'Bug',
+  typeDesign: 'Design',
+  typeQuestion: 'Question',
+  name: 'Votre nom',
+  namePlaceholder: 'Votre nom',
+  reportingAs: 'Signalé en tant que',
+  changeName: 'modifier',
+  send: 'Envoyer',
+  sending: 'Envoi…',
+  sendHint: 'Ctrl/Cmd + Entrée',
+  cancel: 'Annuler',
+  point: 'Pointer un élément',
+  pickerHint: "Cliquez sur l'élément à signaler · Échap pour annuler",
+  undo: 'Annuler',
+  clear: 'Effacer',
+  noScreenshot:
+    "La capture d'écran n'a pas pu être réalisée. Le signalement peut quand même être envoyé sans image.",
+  commentRequired: 'Un commentaire est requis.',
+  nameRequired: 'Un nom est requis.',
+  pageUnknown: 'La page est inconnue.',
+  sendFailed: "L'envoi a échoué.",
+  rateLimited: 'Trop de signalements. Réessayez dans un instant.',
+  retryIn: 'nouvel essai dans',
+  sent: 'Envoyé',
+  sentPending: 'Envoyé, commentaire en attente',
+  openReport: 'ouvrir',
+  pin: 'Signalement',
+  from: 'de',
+  locked: 'Ouvrez cet aperçu depuis le lien de la pull request pour envoyer un signalement.',
+};
+
+// LOCALES maps a locale key to its complete label set. Adding a language is one
+// entry here, not a special case in resolveOptions.
+export const LOCALES: Record<string, Labels> = {
+  en: DEFAULT_LABELS,
+  fr: FRENCH_LABELS,
+};
+
+// localeFor resolves document.documentElement.lang into one of LOCALES' keys:
+// 'fr' and any 'fr-*' regional variant pick French, everything else English.
+function localeFor(lang: string | null | undefined): string {
+  const l = (lang ?? '').toLowerCase();
+  if (l === 'fr' || l.startsWith('fr-')) return 'fr';
+  return 'en';
+}
+
 export interface MountOptions {
   endpoint: string;
   reporter?: Reporter;
@@ -139,7 +193,9 @@ export interface ResolvedOptions {
 const CONTEXT_LIMITS = { keys: 10, key: 200, value: 200 } as const;
 
 export function resolveOptions(input: MountOptions): ResolvedOptions {
-  const labels = { ...DEFAULT_LABELS, ...cleanLabels(input?.labels) };
+  const documentLang = typeof document !== 'undefined' ? document.documentElement.lang : undefined;
+  const base = LOCALES[localeFor(documentLang)] ?? DEFAULT_LABELS;
+  const labels = { ...base, ...cleanLabels(input?.labels) };
   return {
     endpoint: typeof input?.endpoint === 'string' ? input.endpoint : '',
     reporter: reporterOf(input?.reporter),

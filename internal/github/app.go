@@ -47,3 +47,16 @@ func (a *App) InstallationToken(ctx context.Context, installationID int64) (stri
 	}
 	return tok, nil
 }
+
+// FindRepositoryInstallation looks up which installation of the App covers
+// owner/repo (GET /repos/{owner}/{repo}/installation), authenticated with the
+// App's own JWT rather than any installation's token: this is the only call
+// that may use that transport directly.
+func (a *App) FindRepositoryInstallation(ctx context.Context, owner, repo string) (int64, error) {
+	client := gh.NewClient(&http.Client{Transport: a.appsTr})
+	inst, _, err := client.Apps.FindRepositoryInstallation(ctx, owner, repo)
+	if err != nil {
+		return 0, fmt.Errorf("find installation for %s/%s: %w", owner, repo, err)
+	}
+	return inst.GetID(), nil
+}

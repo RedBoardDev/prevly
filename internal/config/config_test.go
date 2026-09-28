@@ -187,6 +187,26 @@ func TestParseHostConfigExternalTLSNeedsNoEmail(t *testing.T) {
 	}
 }
 
+func TestParseHostConfigWithSites(t *testing.T) {
+	t.Parallel()
+	yaml := "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\n" +
+		"feedback:\n  sites:\n    - name: staging\n      repo: acme/shop\n      labels: [feedback/staging]\n      issue_type: Draft\n      key_env: PREVLY_SITE_STAGING_KEY\n"
+	cfg, err := ParseHostConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Feedback.Sites) != 1 {
+		t.Fatalf("sites = %+v", cfg.Feedback.Sites)
+	}
+	site := cfg.Feedback.Sites[0]
+	if site.Name != "staging" || site.Repo != "acme/shop" || site.IssueType != "Draft" || site.KeyEnv != "PREVLY_SITE_STAGING_KEY" {
+		t.Fatalf("site = %+v", site)
+	}
+	if len(site.Labels) != 1 || site.Labels[0] != "feedback/staging" {
+		t.Fatalf("labels = %+v", site.Labels)
+	}
+}
+
 func TestHostConfigValidationErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -201,6 +221,10 @@ func TestHostConfigValidationErrors(t *testing.T) {
 		{"dns01 needs provider", "base_domain: x.com\ntls: {mode: dns-01, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k, webhook_secret_env: W}\n", "tls.provider is required"},
 		{"app_id without key", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, webhook_secret_env: W}\n", "private_key_path is required"},
 		{"app_id without webhook env", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\ngithub: {app_id: 1, private_key_path: k}\n", "webhook_secret_env is required"},
+		{"site bad name", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\nfeedback:\n  sites:\n    - {name: \"Staging\", repo: acme/shop, key_env: K}\n", "name \"Staging\""},
+		{"site duplicate name", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\nfeedback:\n  sites:\n    - {name: staging, repo: acme/shop, key_env: K1}\n    - {name: staging, repo: acme/other, key_env: K2}\n", "duplicate site name"},
+		{"site bad repo", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\nfeedback:\n  sites:\n    - {name: staging, repo: acme-shop, key_env: K}\n", "must be \"owner/name\""},
+		{"site missing key_env", "base_domain: x.com\ntls: {mode: on-demand, email: a@b.c}\nfeedback:\n  sites:\n    - {name: staging, repo: acme/shop}\n", "key_env is required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
