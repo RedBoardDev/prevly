@@ -99,6 +99,7 @@ type SiteConfig struct {
 	Labels    []string `yaml:"labels"`
 	IssueType string   `yaml:"issue_type"`
 	KeyEnv    string   `yaml:"key_env"`
+	TypeLabel bool     `yaml:"type_label"`
 }
 
 // validate checks the sites list on its own (name pattern, uniqueness,

@@ -64,7 +64,7 @@ func RenderSiteIssue(f *model.Feedback, site, baseDomain string) (title, body st
 			plural(len(f.Network), "failed request"), siteNetworkBody(f.Network))
 	}
 
-	return issueTitle(f.Comment), b.String()
+	return kind + ": " + issueTitle(f.Comment), b.String()
 }
 
 func siteTypeHeading(kind string) (string, string) {

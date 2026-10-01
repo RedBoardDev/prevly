@@ -150,12 +150,11 @@ func TestSiteReportCreatesIssueWithLabelsAndType(t *testing.T) {
 	if report.Type != "Draft" {
 		t.Fatalf("type = %q, want the site's configured issue_type", report.Type)
 	}
-	wantLabels := map[string]bool{"feedback/staging": true, "bug": true}
-	for _, l := range report.Labels {
-		delete(wantLabels, l)
+	if len(report.Labels) != 1 || report.Labels[0] != "feedback/staging" {
+		t.Fatalf("labels = %+v, want only the site's labels: the type rides in the title unless type_label is set", report.Labels)
 	}
-	if len(wantLabels) != 0 {
-		t.Fatalf("labels = %+v, missing %+v", report.Labels, wantLabels)
+	if !strings.HasPrefix(report.Title, "Bug: ") {
+		t.Fatalf("title = %q, want the report type in front", report.Title)
 	}
 	if !strings.Contains(report.Body, siteIssueMarker(id)) {
 		t.Fatalf("body missing idempotency marker:\n%s", report.Body)
@@ -275,4 +274,20 @@ func mustID(t *testing.T) string {
 		t.Fatalf("new id: %v", err)
 	}
 	return id
+}
+
+func TestSiteReportAddsTheTypeLabelWhenAsked(t *testing.T) {
+	t.Parallel()
+	site := stagingSite()
+	site.TypeLabel = true
+	f, fg := newSiteFixture(t, site, nil)
+
+	rec := postSite(t, f.svc.ControlHandler(), "staging", siteTestKey, validMeta(), nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
+	}
+	labels := fg.lastIssue().Labels
+	if len(labels) != 2 || labels[1] != "bug" {
+		t.Fatalf("labels = %+v, want the site's labels then the report type", labels)
+	}
 }
