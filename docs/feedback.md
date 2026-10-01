@@ -234,6 +234,7 @@ feedback:
       labels: [feedback/staging]    # optional
       issue_type: Draft             # optional GitHub issue type
       key_env: PREVLY_SITE_STAGING_KEY   # env var holding the shared secret
+      type_label: false             # optional, also label the issue with the report type
 ```
 
 `key_env` never holds the secret inline: it names the environment variable the
@@ -305,11 +306,17 @@ by an activation link the way a preview is — **every reviewer-supplied string
 is made inert** before it enters markdown: an `@mention`, a bare `#123`
 reference, `GH-123` and `owner/repo#123` are all broken with a zero-width
 space, `![` becomes `!` + zero-width space + `[`, and `<`/`>` are escaped. The
-title is the comment's first line, at most 80 characters, made inert the same
-way.
+title is the report type followed by the comment's first line, at most 80
+characters, made inert the same way: `Bug: the total is wrong`.
 
-Labels are the site's configured `labels` plus the report's `type`; the GitHub
-issue type is the site's `issue_type` when configured. GitHub silently drops
+Labels are the site's configured `labels`, plus the report's `type` when the
+site sets `type_label: true`. It is off by default because the type already
+leads the title, and a bare `bug` label would mix widget reports with a team's
+own bugs. The GitHub issue type is the site's `issue_type` when configured.
+
+To tell apps apart, declare one site per application, each with its own
+`labels` (for instance `[source:feedback, area:web]`). Several sites may share
+one `key_env`. GitHub silently drops
 labels or the type when the App lacks push access on the repo — the issue is
 still created, and the daemon logs an error naming what was dropped. A
 400/422 caused by the type field is retried once without it; a

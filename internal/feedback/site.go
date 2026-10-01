@@ -146,7 +146,10 @@ func (s *Service) postSiteIssue(ctx context.Context, f *model.Feedback, site con
 	}
 
 	title, body := RenderSiteIssue(f, f.Site, s.baseDomain)
-	labels := append(append([]string{}, site.Labels...), f.Type)
+	labels := append([]string{}, site.Labels...)
+	if site.TypeLabel {
+		labels = append(labels, f.Type)
+	}
 	report := gh.SiteReport{Title: title, Body: body, Labels: labels, Type: site.IssueType}
 
 	f.PostAttempts++

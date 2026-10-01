@@ -55,5 +55,6 @@ feedback:                          # in-preview reviewer widget -> PR comments
   #     labels: [feedback/staging]          # optional, added to every issue
   #     issue_type: Draft                   # optional GitHub issue type
   #     key_env: PREVLY_SITE_STAGING_KEY    # env var holding the shared secret
+  #     type_label: false                   # optional, also label with the report type
 
 data_dir: /var/lib/prevly          # bbolt state + certs
