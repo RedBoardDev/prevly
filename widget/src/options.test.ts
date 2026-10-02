@@ -122,7 +122,7 @@ describe('resolveOptions', () => {
     const { types } = resolveOptions({ endpoint: '/x' });
     expect(types).toEqual([
       { id: 'bug', label: 'Bug' },
-      { id: 'design', label: 'Design' },
+      { id: 'improvement', label: 'Improvement' },
       { id: 'question', label: 'Question' },
     ]);
   });
@@ -155,7 +155,7 @@ describe('resolveOptions', () => {
       const resolved = resolveOptions({ endpoint: '/x', types: types as never });
       expect(resolved.types).toEqual([
         { id: 'bug', label: 'Bug' },
-        { id: 'design', label: 'Design' },
+        { id: 'improvement', label: 'Improvement' },
         { id: 'question', label: 'Question' },
       ]);
     }

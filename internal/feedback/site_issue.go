@@ -69,8 +69,8 @@ func RenderSiteIssue(f *model.Feedback, site, baseDomain string) (title, body st
 
 func siteTypeHeading(kind string) (string, string) {
 	switch kind {
-	case "design":
-		return "🎨", "Design"
+	case "improvement":
+		return "💡", "Improvement"
 	case "question":
 		return "❓", "Question"
 	case "bug", "":
