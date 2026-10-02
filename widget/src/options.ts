@@ -1,9 +1,9 @@
-// ReportType used to be the closed 'bug' | 'design' | 'question' union; it is
+// ReportType used to be the closed 'bug' | 'improvement' | 'question' union; it is
 // now any id from the resolved `types` list, so it is kept as a plain string
 // alias for signature compatibility.
 export type ReportType = string;
 
-export const REPORT_TYPES: readonly ReportType[] = ['bug', 'design', 'question'];
+export const REPORT_TYPES: readonly ReportType[] = ['bug', 'improvement', 'question'];
 
 export type Corner = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
 
@@ -44,7 +44,7 @@ export interface Labels {
   commentPlaceholder: string;
   type: string;
   typeBug: string;
-  typeDesign: string;
+  typeImprovement: string;
   typeQuestion: string;
   name: string;
   namePlaceholder: string;
@@ -82,7 +82,7 @@ export const DEFAULT_LABELS: Labels = {
   commentPlaceholder: 'Describe it in one sentence',
   type: 'Type',
   typeBug: 'Bug',
-  typeDesign: 'Design',
+  typeImprovement: 'Improvement',
   typeQuestion: 'Question',
   name: 'Your name',
   namePlaceholder: 'Your name',
@@ -120,7 +120,7 @@ const FRENCH_LABELS: Labels = {
   commentPlaceholder: 'Décrivez-le en une phrase',
   type: 'Type',
   typeBug: 'Bug',
-  typeDesign: 'Design',
+  typeImprovement: 'Amélioration',
   typeQuestion: 'Question',
   name: 'Votre nom',
   namePlaceholder: 'Votre nom',
@@ -212,7 +212,7 @@ export function resolveOptions(input: MountOptions): ResolvedOptions {
 function defaultTypes(labels: Labels): TypeOption[] {
   return [
     { id: 'bug', label: labels.typeBug },
-    { id: 'design', label: labels.typeDesign },
+    { id: 'improvement', label: labels.typeImprovement },
     { id: 'question', label: labels.typeQuestion },
   ];
 }

@@ -209,7 +209,7 @@ Only the heading and the reviewer's own words are visible. The screenshot, the
 location table, the console and the network are folded, so a pull request
 collecting a dozen reports stays readable.
 
-`bug`, `design` and `question` keep their own glyph and name (🐞/🎨/❓); any
+`bug`, `improvement` and `question` keep their own glyph and name (🐞/💡/❓); any
 other configured type id gets one neutral glyph (🏷️) and its id, capitalized
 and de-hyphenated (`feature-request` → "Feature Request") — sanitized like any
 other reviewer-supplied text, since the id travels from the client.

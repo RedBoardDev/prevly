@@ -51,8 +51,8 @@ func RenderComment(f *model.Feedback, baseDomain, previewURL string) string {
 // like any other reviewer-supplied text, since the id travels from the client.
 func typeHeading(kind string) (string, string) {
 	switch kind {
-	case "design":
-		return "🎨", "Design"
+	case "improvement":
+		return "💡", "Improvement"
 	case "question":
 		return "❓", "Question"
 	case "bug", "":
