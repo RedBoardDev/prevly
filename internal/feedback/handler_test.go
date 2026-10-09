@@ -637,7 +637,7 @@ func TestCreateDefaultsTypeToBug(t *testing.T) {
 }
 
 // TestCreateAcceptsACustomType proves the server accepts any type id matching
-// the pattern, not just the closed bug/design/question set, and renders an
+// the pattern, not just the closed bug/improvement/question set, and renders an
 // unknown one with a neutral glyph and its capitalized id.
 func TestCreateAcceptsACustomType(t *testing.T) {
 	t.Parallel()
@@ -661,7 +661,7 @@ func TestCreateStoresTypeContextAndNetwork(t *testing.T) {
 	f := newFixture(t, defaultConfig())
 
 	meta := metaWith(t, map[string]any{
-		"type":    "design",
+		"type":    "improvement",
 		"context": map[string]string{"stage": "staging"},
 		"network": []map[string]any{
 			{"method": "GET", "path": "/rs/v1/reports", "status": 503, "requestId": "req-1", "at": "2026-09-21T10:12:33Z"},
@@ -674,7 +674,7 @@ func TestCreateStoresTypeContextAndNetwork(t *testing.T) {
 
 	body := f.gh.last()
 	for _, want := range []string{
-		"### 🎨 Design ·",
+		"### 💡 Improvement ·",
 		"| stage | `staging` |",
 		"<details><summary>Network (1 failed request)</summary>",
 		"GET /rs/v1/reports 503 x-request-id=req-1",
@@ -688,7 +688,7 @@ func TestCreateStoresTypeContextAndNetwork(t *testing.T) {
 	if err != nil || len(stored) != 1 {
 		t.Fatalf("stored = %d, err = %v", len(stored), err)
 	}
-	if stored[0].Type != "design" || stored[0].Context["stage"] != "staging" || len(stored[0].Network) != 1 {
+	if stored[0].Type != "improvement" || stored[0].Context["stage"] != "staging" || len(stored[0].Network) != 1 {
 		t.Fatalf("record lost the new fields: %+v", stored[0])
 	}
 }

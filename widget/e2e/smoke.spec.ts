@@ -90,7 +90,7 @@ test('a page-level report carries the page and no element', async ({ page }) => 
 
   await page.locator(badge).click();
   await expect(page.locator(panel)).toBeVisible();
-  await page.locator('[data-prevly-type="design"]').click();
+  await page.locator('[data-prevly-type="improvement"]').click();
   await page.locator(comment).fill('The whole page looks broken.');
   await page.locator(author).fill('Thomas');
   await page.locator(send).click();
@@ -99,7 +99,7 @@ test('a page-level report carries the page and no element', async ({ page }) => 
   const entries = await received(page);
   expect(entries).toHaveLength(1);
   const meta = entries[0]!.meta;
-  expect(meta.type).toBe('design');
+  expect(meta.type).toBe('improvement');
   expect(meta.page).toBe('/');
   expect(meta.selector).toBeUndefined();
   expect(meta.element).toBeUndefined();

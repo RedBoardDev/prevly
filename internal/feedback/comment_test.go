@@ -161,10 +161,10 @@ func TestRenderCommentEscapesMarkers(t *testing.T) {
 func TestRenderCommentHeadingCarriesTheType(t *testing.T) {
 	t.Parallel()
 	for kind, want := range map[string]string{
-		"bug":      "### 🐞 Bug · Thomas",
-		"design":   "### 🎨 Design · Thomas",
-		"question": "### ❓ Question · Thomas",
-		"":         "### 🐞 Bug · Thomas",
+		"bug":         "### 🐞 Bug · Thomas",
+		"improvement": "### 💡 Improvement · Thomas",
+		"question":    "### ❓ Question · Thomas",
+		"":            "### 🐞 Bug · Thomas",
 	} {
 		f := sampleRecord()
 		f.Type = kind
